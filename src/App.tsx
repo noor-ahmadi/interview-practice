@@ -99,39 +99,34 @@ export function App() {
       <a className="skip-link" href="#question">
         Skip to the question
       </a>
-      <header className="app-header">
-        <a className="brand" href="/" aria-label="Interview Practice home">
-          <img src="/favicon.svg" width="30" height="30" alt="" />
-          <span>Interview Practice</span>
-        </a>
-        <div className="header-actions">
-          <span className="save-status" role="status">
-            {saveFailed
-              ? "Couldn’t save on this device"
-              : "Saved on this device"}
-          </span>
-          <button
-            ref={aboutTrigger}
-            className="text-button"
-            onClick={() => aboutDialog.current?.showModal()}
-          >
-            About this build
-          </button>
-        </div>
-      </header>
-
       <main>
-        <div className="session-heading">
+        <header className="session-heading">
           <div>
-            <p className="section-label">System design practice</p>
+            <p className="section-label">Interview Practice / System design</p>
             <h1>Food delivery</h1>
             <p className="scenario-subtitle">
               A hypothetical DoorDash-style service. Start small and reason
               through what changes.
             </p>
           </div>
-          <span className="question-count">Question {session.path.length}</span>
-        </div>
+          <div className="header-actions">
+            <span className="question-count">
+              Question {session.path.length}
+            </span>
+            <span className="save-status" role="status">
+              {saveFailed
+                ? "Couldn’t save on this device"
+                : "Saved on this device"}
+            </span>
+            <button
+              ref={aboutTrigger}
+              className="text-button"
+              onClick={() => aboutDialog.current?.showModal()}
+            >
+              About this build
+            </button>
+          </div>
+        </header>
 
         {saveFailed && (
           <p className="storage-error" role="alert">
@@ -253,7 +248,7 @@ export function App() {
                     </p>
                   </div>
                   <button
-                ref={diagramTrigger}
+                    ref={diagramTrigger}
                     className="icon-button"
                     aria-label="Expand architecture diagram"
                     onClick={() => {
@@ -401,7 +396,7 @@ export function App() {
 
       <dialog
         ref={aboutDialog}
-      onClose={() => aboutTrigger.current?.focus({ preventScroll: true })}
+        onClose={() => aboutTrigger.current?.focus({ preventScroll: true })}
         aria-labelledby="about-heading"
         onClick={(event) => {
           if (event.target === event.currentTarget)
@@ -437,7 +432,7 @@ export function App() {
       <dialog
         className="diagram-dialog"
         ref={diagramDialog}
-      onClose={() => diagramTrigger.current?.focus({ preventScroll: true })}
+        onClose={() => diagramTrigger.current?.focus({ preventScroll: true })}
         aria-labelledby="expanded-heading"
         onClick={(event) => {
           if (event.target === event.currentTarget)

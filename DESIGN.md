@@ -4,7 +4,7 @@ The study screen answers one question: what decision would you make with the sys
 
 Use a flat black ground, #111 surfaces, #2a2a2a nested controls, #fff primary text, #b4b4b4 secondary text, and #949494 metadata. Use IBM Plex Sans at 400, 500, and 600. A muted mint marks changed architecture components; official service icons identify AWS products. Primary actions use white with black text. Keep controls at least 44px tall, panels unshadowed, and body text readable.
 
-Desktop pairs the question and diagram. Tablet stacks them. Phone diagrams use a vertical arrangement with numbered connections and a matching text list. Expanded diagrams have button-operated zoom and component descriptions. Notes are optional. Native dialogs retain keyboard focus and support Escape. Reduced motion disables transitions.
+The workspace uses the full browser width and available height. A compact text header holds the scenario title and session controls without a logo or separate masthead. Desktop pairs a readable question column with a diagram that fills the remaining space. Tablet stacks them. Phone diagrams use a vertical arrangement with numbered connections and a matching text list. Expanded diagrams have button-operated zoom and component descriptions. Notes are optional. Native dialogs retain keyboard focus and support Escape. Reduced motion disables transitions.
 
 Only revealed questions belong in the session path. Render diagrams from the active question or answer frame; do not reserve positions, labels, edges, or thumbnails for future changes. A reference design is one valid approach and is never described as a company’s actual production architecture.
 

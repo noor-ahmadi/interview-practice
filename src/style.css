@@ -12,6 +12,7 @@
   --faint: #949494;
   --accent: #b9e7cf;
   --gap: 32px;
+  --page-gutter: clamp(24px, 2.5vw, 64px);
 }
 * {
   box-sizing: border-box;
@@ -19,6 +20,11 @@
 body {
   margin: 0;
   min-width: 320px;
+}
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
 }
 button,
 textarea {
@@ -89,33 +95,23 @@ button svg {
 .skip-link:focus {
   transform: translateY(0);
 }
-.app-header,
 main,
 .app-footer {
-  max-width: 1392px;
-  margin-inline: auto;
-  padding-inline: 48px;
+  width: 100%;
+  padding-inline: var(--page-gutter);
 }
-.app-header {
-  min-height: 80px;
+main {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-}
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 17px;
-  font-weight: 500;
-  text-decoration: none;
-  white-space: nowrap;
+  flex-direction: column;
+  flex: 1;
+  padding-top: 24px;
 }
 .header-actions {
   display: flex;
   align-items: center;
   gap: 22px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .save-status,
 .section-label,
@@ -138,16 +134,16 @@ main,
 }
 .session-heading {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding-block: 42px 40px;
+  padding-bottom: 28px;
 }
 .section-label {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 h1 {
-  font-size: 34px;
+  font-size: 28px;
   line-height: 1.2;
   font-weight: 500;
   letter-spacing: -0.8px;
@@ -156,24 +152,30 @@ h1 {
   color: var(--muted);
   font-size: 16px;
   line-height: 1.6;
-  margin-top: 12px;
-  max-width: 620px;
+  margin-top: 10px;
+  max-width: 72ch;
 }
 .question-count {
-  padding-bottom: 3px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-/* At 1392px: 96px gutters + 1296px canvas. The canvas is split 46:54 after one 32px gap. */
+/* Full viewport minus two gutters and one gap: up to 520px of reading space, then the diagram. */
 .study-layout,
 .feedback {
   display: grid;
-  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  grid-template-columns: minmax(320px, clamp(340px, 34vw, 520px)) minmax(0, 1fr);
   gap: var(--gap);
   align-items: start;
 }
+.study-layout {
+  flex: 1;
+  align-items: stretch;
+  /* Reserve the viewport for the active system even when feedback adds content below it. */
+  min-height: max(520px, calc(100dvh - 17rem));
+}
 .question-pane {
-  padding: 30px 16px 0 0;
+  min-width: 0;
+  padding: 24px 0 0;
 }
 .question-pane h2 {
   font-size: clamp(26px, 2.4vw, 32px);
@@ -282,10 +284,18 @@ textarea::placeholder {
   font-size: 13px;
 }
 .diagram-pane {
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border-radius: 20px;
   padding: 22px;
   min-width: 0;
+}
+.diagram-pane > .architecture {
+  flex: 1 1 0px;
+  height: 0;
+  min-height: 360px;
+  max-height: none;
 }
 .diagram-header {
   display: flex;
@@ -411,6 +421,12 @@ textarea::placeholder {
   padding: 30px;
   gap: 42px;
   outline: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.feedback-main > p,
+.pitfall p,
+.rubric-list {
+  max-width: 72ch;
 }
 .feedback h2 {
   font-size: 24px;
@@ -566,7 +582,7 @@ textarea::placeholder {
   display: flex;
   justify-content: space-between;
   gap: 24px;
-  margin-block: 60px 24px;
+  margin-block: 30px 20px;
   color: var(--faint);
   font-size: 12px;
   line-height: 1.6;
@@ -699,15 +715,18 @@ dialog::backdrop {
   color: var(--muted);
   line-height: 1.5;
 }
-@media (max-width: 1000px) {
-  .app-header,
-  main,
-  .app-footer {
-    padding-inline: 28px;
+@media (max-width: 1100px) {
+  :root {
+    --page-gutter: 28px;
   }
   .study-layout {
+    flex: none;
+    min-height: 0;
     grid-template-columns: minmax(0, 1fr);
     gap: 32px;
+  }
+  .diagram-pane {
+    display: block;
   }
   .question-pane {
     padding: 8px 0 0;
@@ -716,6 +735,8 @@ dialog::backdrop {
     max-width: 700px;
   }
   .diagram-pane .architecture {
+    height: auto;
+    min-height: 0;
     max-height: 370px;
   }
   .feedback {
@@ -732,25 +753,16 @@ dialog::backdrop {
   }
 }
 @media (max-width: 640px) {
-  .app-header,
-  main,
-  .app-footer {
-    padding-inline: 20px;
+  :root {
+    --page-gutter: 20px;
   }
-  .app-header {
-    min-height: 72px;
-    gap: 12px;
-  }
-  .brand {
-    gap: 8px;
-    font-size: 15px;
-  }
-  .brand img {
-    width: 26px;
-    height: 26px;
+  main {
+    padding-top: 20px;
   }
   .header-actions {
-    gap: 0;
+    align-self: stretch;
+    justify-content: space-between;
+    gap: 12px;
   }
   .save-status {
     display: none;
@@ -759,7 +771,8 @@ dialog::backdrop {
     font-size: 13px;
   }
   .session-heading {
-    padding-block: 26px 30px;
+    flex-direction: column;
+    padding-bottom: 24px;
     gap: 10px;
     flex-wrap: wrap;
     align-items: start;
@@ -773,7 +786,6 @@ dialog::backdrop {
     margin-top: 10px;
   }
   .question-count {
-    margin-top: 6px;
     font-size: 13px;
   }
   .question-pane h2 {

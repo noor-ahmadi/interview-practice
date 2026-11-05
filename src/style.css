@@ -648,6 +648,63 @@ dialog {
 dialog::backdrop {
   background: #000c;
 }
+.history-dialog {
+  width: min(820px, calc(100% - 32px));
+  overscroll-behavior: contain;
+}
+.past-session > summary,
+.past-answer > summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding-block: 12px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.past-session > summary {
+  font-size: 16px;
+  color: #fff;
+}
+.past-session > summary > span {
+  margin-left: 16px;
+  font-size: 13px;
+  color: var(--faint);
+}
+.past-question {
+  margin-block: 16px;
+  padding: 20px;
+  border-radius: 12px;
+  background: #222;
+}
+.past-question-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+.past-question p,
+.past-answer li {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.past-question p {
+  margin-top: 12px;
+}
+.past-notes {
+  margin-top: 18px;
+}
+.past-notes h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.past-notes p {
+  white-space: pre-wrap;
+}
+.past-answer {
+  margin-top: 12px;
+}
 .dialog-content {
   padding: 26px;
 }

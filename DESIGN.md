@@ -8,4 +8,6 @@ The workspace uses the full browser width and available height. A compact text h
 
 Only revealed questions belong in the session path. Render diagrams from the active question or answer frame; do not reserve positions, labels, edges, or thumbnails for future changes. A reference design is one valid approach and is never described as a company’s actual production architecture.
 
+History preserves completed paths, notes, and self-ratings across new sessions. Its dialog shows only answered questions, and unmounts those records when closed so practice does not preview previous branches. Earlier local saves migrate without resetting the active session.
+
 References: [Taste Skill](https://github.com/Leonxlnx/taste-skill), using its true-black-flat app direction; [VoltAgent’s Linear and IBM analyses](https://github.com/VoltAgent/awesome-design-md), for hierarchy and typography; [Vercel Web Interface Guidelines](https://github.com/vercel-labs/web-interface-guidelines), for interaction and accessibility; and [Playwright CLI](https://github.com/microsoft/playwright-cli), for browser review.

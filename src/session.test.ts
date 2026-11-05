@@ -8,6 +8,7 @@ import {
   newSession,
   rate,
   readPractice,
+  restart,
   reveal,
 } from "./session.ts";
 
@@ -148,4 +149,73 @@ test("content has a reachable tree and coherent frames without sibling changes",
   visit(rootQuestionId);
   assert.equal(visited.size, Object.keys(questions).length);
   assert.equal(grades.length, 4);
+});
+
+function completedPractice() {
+  let practice = initialPractice();
+  practice.session.notes[rootQuestionId] =
+    "One application and a durable database.";
+  practice.session = rate(reveal(practice.session), "Good");
+  practice = advance(practice, () => 0.5);
+  practice.session.notes[currentQuestion(practice.session).id] =
+    "Keep uploads private.";
+  practice.session = rate(reveal(practice.session), "Hard");
+  return advance(practice);
+}
+
+test("completion archives once and restarting preserves previous notes and grades", () => {
+  const practice = completedPractice();
+  assert.equal(practice.history.length, 1);
+  assert.equal(advance(practice), practice);
+  const archived = structuredClone(practice.history[0]);
+  const next = restart(practice);
+  assert.equal(next.lastFollowup, practice.lastFollowup);
+  assert.equal(next.history.length, 1);
+  assert.deepEqual(next.session, newSession());
+  assert.equal(restart(next), next);
+  next.session = rate(reveal(next.session), "Again");
+  assert.deepEqual(next.history[0], archived);
+  assert.deepEqual(readPractice(JSON.stringify(next)), next);
+});
+
+test("legacy saves migrate without losing notes, ratings, or reveal state", () => {
+  const feedback = initialPractice();
+  feedback.session.notes[rootQuestionId] = "My existing reasoning.";
+  feedback.session = reveal(feedback.session);
+  const rated = { ...feedback, session: rate(feedback.session, "Good") };
+  for (const practice of [
+    initialPractice(),
+    feedback,
+    rated,
+    completedPractice(),
+  ]) {
+    const legacy = {
+      version: 1,
+      session: practice.session,
+      lastFollowup: practice.lastFollowup,
+    };
+    assert.deepEqual(readPractice(JSON.stringify(legacy)), practice);
+  }
+});
+
+test("history rejects unfinished paths and notes belonging to unseen questions", () => {
+  const completed = completedPractice().session;
+  for (const history of [
+    null,
+    {},
+    [newSession()],
+    [{ ...completed, phase: "rated" }],
+    [{ ...completed, path: [rootQuestionId, "missing"] }],
+    [
+      {
+        ...completed,
+        notes: { ...completed.notes, "delivery-lunch-rush": "Unseen" },
+      },
+    ],
+  ]) {
+    assert.equal(
+      readPractice(JSON.stringify({ ...initialPractice(), history })),
+      null,
+    );
+  }
 });

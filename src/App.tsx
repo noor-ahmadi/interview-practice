@@ -5,9 +5,9 @@ import {
   advance,
   currentQuestion,
   initialPractice,
-  newSession,
   rate,
   readPractice,
+  restart,
   reveal,
   storageKey,
 } from "./session.ts";
@@ -57,13 +57,16 @@ export function App() {
   const [practice, setPractice] = useState<SavedPractice>(loadPractice);
   const [saveFailed, setSaveFailed] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(
     () => !!practice.session.notes[currentQuestion(practice.session).id],
   );
   const aboutDialog = useRef<HTMLDialogElement>(null);
   const diagramDialog = useRef<HTMLDialogElement>(null);
+  const historyDialog = useRef<HTMLDialogElement>(null);
   const aboutTrigger = useRef<HTMLButtonElement>(null);
   const diagramTrigger = useRef<HTMLButtonElement>(null);
+  const historyTrigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const diagramHeading = useRef<HTMLHeadingElement>(null);
   const { session } = practice;
@@ -119,6 +122,19 @@ export function App() {
                 : "Saved on this device"}
             </span>
             <button
+              ref={historyTrigger}
+              className="text-button"
+              onClick={() => {
+                setHistoryOpen(true);
+                historyDialog.current?.showModal();
+              }}
+            >
+              History
+              {practice.history.length > 0
+                ? ` (${practice.history.length})`
+                : ""}
+            </button>
+            <button
               ref={aboutTrigger}
               className="text-button"
               onClick={() => aboutDialog.current?.showModal()}
@@ -159,15 +175,15 @@ export function App() {
             <button
               className="primary-button"
               onClick={() => {
-                setPractice((value) => ({ ...value, session: newSession() }));
+                setPractice(restart);
+                setNotesOpen(false);
                 requestAnimationFrame(() => heading.current?.focus());
               }}
             >
               Practice another path <Arrow />
             </button>
             <p className="small-note">
-              This first build saves locally. Scheduling and account sync come
-              in later iterations.
+              Your notes and ratings are saved in History.
             </p>
           </section>
         ) : (
@@ -395,6 +411,83 @@ export function App() {
       </footer>
 
       <dialog
+        className="history-dialog"
+        ref={historyDialog}
+        onClose={() => {
+          setHistoryOpen(false);
+          historyTrigger.current?.focus({ preventScroll: true });
+        }}
+        aria-labelledby="history-heading"
+        onClick={(event) => {
+          if (event.target === event.currentTarget)
+            historyDialog.current?.close();
+        }}
+      >
+        <div className="dialog-content">
+          <div className="dialog-heading">
+            <h2 id="history-heading">Past sessions</h2>
+            <button
+              className="text-button"
+              onClick={() => historyDialog.current?.close()}
+            >
+              Close
+            </button>
+          </div>
+          {historyOpen &&
+            (practice.history.length === 0 ? (
+              <p>
+                Completed sessions appear here. Your current notes are saved as
+                you go.
+              </p>
+            ) : (
+              <div className="history-sessions">
+                {practice.history.toReversed().map((past, index) => (
+                  <details
+                    className="past-session"
+                    key={practice.history.length - index}
+                    open={index === 0}
+                  >
+                    <summary>
+                      Session {practice.history.length - index}
+                      <span>{past.path.length} questions</span>
+                    </summary>
+                    {past.path.map((id) => (
+                      <article className="past-question" key={id}>
+                        <div className="past-question-heading">
+                          <h3>{questions[id]!.title}</h3>
+                          <span className="rating-label">
+                            {past.ratings[id]}
+                          </span>
+                        </div>
+                        <p>{questions[id]!.prompt}</p>
+                        {past.notes[id] ? (
+                          <div className="past-notes">
+                            <h4>Your notes</h4>
+                            <p>{past.notes[id]}</p>
+                          </div>
+                        ) : (
+                          <p className="small-note">
+                            No written notes for this question.
+                          </p>
+                        )}
+                        <details className="past-answer">
+                          <summary>Review reference answer</summary>
+                          <p>{questions[id]!.explanation}</p>
+                          <ul>
+                            {questions[id]!.rubric.map((point) => (
+                              <li key={point}>{point}</li>
+                            ))}
+                          </ul>
+                        </details>
+                      </article>
+                    ))}
+                  </details>
+                ))}
+              </div>
+            ))}
+        </div>
+      </dialog>
+      <dialog
         ref={aboutDialog}
         onClose={() => aboutTrigger.current?.focus({ preventScroll: true })}
         aria-labelledby="about-heading"
@@ -419,9 +512,10 @@ export function App() {
             reveal them.
           </p>
           <p>
-            This build saves your notes, self-ratings, and current question on
-            this device. It does not yet provide spaced scheduling, accounts, or
-            sync.
+            This build saves your notes, self-ratings, current question, and
+            completed sessions on this device. History only includes questions
+            you have already answered. It does not yet provide spaced
+            scheduling, accounts, or sync.
           </p>
           <p>
             The questions are original, hypothetical exercises with linked

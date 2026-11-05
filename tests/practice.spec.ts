@@ -73,7 +73,38 @@ test("questions and solutions appear only when revealed, including after reload"
   await expect(
     page.getByRole("heading", { name: "Session complete." }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "History (1)", exact: true }).click();
+  const history = page.getByRole("dialog", { name: "Past sessions" });
+  await expect(history).toBeVisible();
+  await expect(history).toContainText(
+    "One application and a durable database.",
+  );
+  await expect(history).toContainText("The menu needs photos.");
+  await expect(history).not.toContainText("The lunch rush arrives.");
+  await expect(history).not.toContainText("One tap. Two orders.");
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze()
+    ).violations,
+  ).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath("history.png"),
+    fullPage: true,
+  });
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "History (1)", exact: true }),
+  ).toBeFocused();
   await page.getByRole("button", { name: "Practice another path" }).click();
+  await expect(page.locator("body")).not.toContainText("Amazon S3");
+  await page.reload();
+  await page.getByRole("button", { name: "History (1)", exact: true }).click();
+  await expect(history).toContainText(
+    "One application and a durable database.",
+  );
+  await page.keyboard.press("Escape");
   await expect(page.locator("body")).not.toContainText("Amazon S3");
   await page.getByRole("button", { name: "Reveal answer" }).click();
   await page.getByRole("button", { name: "Good", exact: true }).click();
@@ -110,6 +141,14 @@ test("diagram controls, keyboard focus, and layouts remain accessible", async ({
   await page.keyboard.press("Enter");
   await expect(
     page.getByRole("heading", { name: "Start with ten customers." }),
+  ).toBeFocused();
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Past sessions" }),
+  ).toContainText("Completed sessions appear here.");
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "History", exact: true }),
   ).toBeFocused();
   await page
     .getByRole("button", { name: "Expand architecture diagram" })
@@ -161,4 +200,59 @@ test("blocked browser storage is reported without breaking study", async ({
   );
   await page.getByRole("button", { name: "Reveal answer" }).click();
   await expect(page.locator(".diagram-pane")).toContainText("Amazon EC2");
+});
+
+test("an existing completed session migrates into history on reload", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const key = "interview-practice:v1";
+    if (!localStorage.getItem(key))
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 1,
+          lastFollowup: "delivery-menu-photos",
+          session: {
+            path: ["delivery-small-start", "delivery-menu-photos"],
+            phase: "complete",
+            notes: { "delivery-small-start": "Keep my existing notes." },
+            ratings: {
+              "delivery-small-start": "Good",
+              "delivery-menu-photos": "Hard",
+            },
+          },
+        }),
+      );
+  });
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Session complete." }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("interview-practice:v1")!).version,
+      ),
+    )
+    .toBe(2);
+  await page.reload();
+  await page.getByRole("button", { name: "History (1)", exact: true }).click();
+  const history = page.getByRole("dialog", { name: "Past sessions" });
+  await expect(history).toContainText("Keep my existing notes.");
+  await expect(history.getByText("Hard", { exact: true })).toBeVisible();
+  await expect(history).not.toContainText("The lunch rush arrives.");
+  await history
+    .getByText("Review reference answer", { exact: true })
+    .first()
+    .click();
+  await expect(
+    history.getByText(/One application on Amazon EC2/),
+  ).toBeVisible();
+  expect(
+    await history.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
 });

@@ -1,6 +1,7 @@
 import { grades, questions, rootQuestionId } from "./content.ts";
 import type { Grade } from "./content.ts";
 
+// Keep the existing key so earlier saves can migrate in place.
 export const storageKey = "interview-practice:v1";
 export type Session = {
   path: string[];
@@ -9,9 +10,10 @@ export type Session = {
   ratings: Record<string, Grade>;
 };
 export type SavedPractice = {
-  version: 1;
+  version: 2;
   session: Session;
   lastFollowup: string | null;
+  history: Session[];
 };
 
 export function newSession(): Session {
@@ -19,7 +21,15 @@ export function newSession(): Session {
 }
 
 export function initialPractice(): SavedPractice {
-  return { version: 1, session: newSession(), lastFollowup: null };
+  return { version: 2, session: newSession(), lastFollowup: null, history: [] };
+}
+
+export function restart(practice: SavedPractice): SavedPractice {
+  if (practice.session.phase !== "complete") return practice;
+  return {
+    ...practice,
+    session: newSession(),
+  };
 }
 
 export function currentQuestion(session: Session) {
@@ -48,8 +58,14 @@ export function advance(
   const { session } = practice;
   if (session.phase !== "rated") return practice;
   const children = currentQuestion(session).children;
-  if (!children.length)
-    return { ...practice, session: { ...session, phase: "complete" } };
+  if (!children.length) {
+    const completed: Session = { ...session, phase: "complete" };
+    return {
+      ...practice,
+      session: completed,
+      history: [...practice.history, completed],
+    };
+  }
   const alternatives = children.filter((id) => id !== practice.lastFollowup);
   const pool = alternatives.length ? alternatives : children;
   const next =
@@ -61,71 +77,94 @@ export function advance(
   };
 }
 
-// Reject incompatible or malformed saves rather than resuming an invalid path or revealing feedback early.
+function isSession(value: unknown): value is Session {
+  if (!value || typeof value !== "object") return false;
+  const session = value as Session;
+  if (
+    !Array.isArray(session.path) ||
+    session.path[0] !== rootQuestionId ||
+    session.path.length > Object.keys(questions).length
+  )
+    return false;
+  if (!["question", "feedback", "rated", "complete"].includes(session.phase))
+    return false;
+  if (
+    !session.notes ||
+    Array.isArray(session.notes) ||
+    typeof session.notes !== "object" ||
+    !session.ratings ||
+    Array.isArray(session.ratings) ||
+    typeof session.ratings !== "object"
+  )
+    return false;
+  for (let i = 0; i < session.path.length; i++) {
+    const id = session.path[i];
+    if (typeof id !== "string" || !Object.hasOwn(questions, id)) return false;
+    if (i > 0 && !questions[session.path[i - 1]]!.children.includes(id))
+      return false;
+    if (i < session.path.length - 1 && !grades.includes(session.ratings[id]))
+      return false;
+  }
+  const visited = new Set(session.path);
+  if (
+    Object.entries(session.notes).some(
+      ([id, note]) =>
+        !visited.has(id) || typeof note !== "string" || note.length > 10000,
+    )
+  )
+    return false;
+  if (
+    Object.entries(session.ratings).some(
+      ([id, grade]) => !visited.has(id) || !grades.includes(grade as Grade),
+    )
+  )
+    return false;
+  const last = currentQuestion(session);
+  if (
+    ["rated", "complete"].includes(session.phase) &&
+    !grades.includes(session.ratings[last.id])
+  )
+    return false;
+  if (
+    ["question", "feedback"].includes(session.phase) &&
+    session.ratings[last.id]
+  )
+    return false;
+  if (session.phase === "complete" && last.children.length) return false;
+  return true;
+}
+
+// Validate active and completed paths before showing any saved question or answer.
 export function readPractice(raw: string | null): SavedPractice | null {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw);
-    const session = value?.session;
-    if (
-      value.version !== 1 ||
-      !session ||
-      !Array.isArray(session.path) ||
-      session.path[0] !== rootQuestionId ||
-      session.path.length > Object.keys(questions).length
-    )
+    if (!value || ![1, 2].includes(value.version) || !isSession(value.session))
       return null;
-    if (!["question", "feedback", "rated", "complete"].includes(session.phase))
-      return null;
-    if (
-      !session.notes ||
-      Array.isArray(session.notes) ||
-      typeof session.notes !== "object" ||
-      !session.ratings ||
-      Array.isArray(session.ratings) ||
-      typeof session.ratings !== "object"
-    )
-      return null;
-    for (let i = 0; i < session.path.length; i++) {
-      const id = session.path[i];
-      if (typeof id !== "string" || !Object.hasOwn(questions, id)) return null;
-      if (i > 0 && !questions[session.path[i - 1]]!.children.includes(id))
-        return null;
-      if (i < session.path.length - 1 && !grades.includes(session.ratings[id]))
-        return null;
-    }
-    const visited = new Set(session.path);
-    if (
-      Object.entries(session.notes).some(
-        ([id, note]) =>
-          !visited.has(id) || typeof note !== "string" || note.length > 10000,
-      )
-    )
-      return null;
-    if (
-      Object.entries(session.ratings).some(
-        ([id, grade]) => !visited.has(id) || !grades.includes(grade as Grade),
-      )
-    )
-      return null;
-    const last = currentQuestion(session);
-    if (
-      ["rated", "complete"].includes(session.phase) &&
-      !grades.includes(session.ratings[last.id])
-    )
-      return null;
-    if (
-      ["question", "feedback"].includes(session.phase) &&
-      session.ratings[last.id]
-    )
-      return null;
-    if (session.phase === "complete" && last.children.length) return null;
     if (
       value.lastFollowup !== null &&
       !questions[rootQuestionId]!.children.includes(value.lastFollowup)
     )
       return null;
-    return value as SavedPractice;
+    const history =
+      value.version === 1
+        ? value.session.phase === "complete"
+          ? [value.session]
+          : []
+        : value.history;
+    if (
+      !Array.isArray(history) ||
+      !history.every(
+        (session) => isSession(session) && session.phase === "complete",
+      )
+    )
+      return null;
+    return {
+      version: 2,
+      session: value.session,
+      lastFollowup: value.lastFollowup,
+      history,
+    };
   } catch {
     return null;
   }

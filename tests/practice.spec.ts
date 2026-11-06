@@ -233,7 +233,9 @@ test("an existing completed session migrates into history on reload", async ({
     .poll(() =>
       page.evaluate(
         () =>
-          JSON.parse(localStorage.getItem("interview-practice:v1")!).version,
+          JSON.parse(
+            localStorage.getItem("interview-practice:study:v1:guest") ?? "null",
+          )?.study.practice.version,
       ),
     )
     .toBe(2);

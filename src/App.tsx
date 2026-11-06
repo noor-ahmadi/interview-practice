@@ -1,585 +1,437 @@
 import { useEffect, useRef, useState } from "react";
-import { Architecture } from "./Architecture.tsx";
-import { grades, questions } from "./content.ts";
-import {
-  advance,
-  currentQuestion,
-  initialPractice,
-  rate,
-  readPractice,
-  restart,
-  reveal,
-  storageKey,
-} from "./session.ts";
-import type { SavedPractice } from "./session.ts";
+import { Scenario } from "./Scenario.tsx";
+import { Review } from "./Review.tsx";
+import { PrivateCards } from "./PrivateCards.tsx";
+import { useStudy } from "./useStudy.ts";
+import { backup, rateScenario, readBackup } from "./study.ts";
+import type { Study } from "./study.ts";
+import { supabase } from "./cloud.ts";
 
-function loadPractice() {
-  try {
-    return readPractice(localStorage.getItem(storageKey)) ?? initialPractice();
-  } catch {
-    return initialPractice();
-  }
-}
+type View = "scenario" | "review" | "cards";
 
-function Arrow() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      aria-hidden="true"
-    >
-      <path d="M5 12h14m-6-6 6 6-6 6" />
-    </svg>
-  );
-}
-
-function Check() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      aria-hidden="true"
-    >
-      <path d="m5 12 4 4L19 6" />
-    </svg>
-  );
+function currentView(): View {
+  const requested = new URLSearchParams(location.search).get("view");
+  return requested === "review" || requested === "cards"
+    ? requested
+    : "scenario";
 }
 
 export function App() {
-  const [practice, setPractice] = useState<SavedPractice>(loadPractice);
-  const [saveFailed, setSaveFailed] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(
-    () => !!practice.session.notes[currentQuestion(practice.session).id],
-  );
-  const aboutDialog = useRef<HTMLDialogElement>(null);
-  const diagramDialog = useRef<HTMLDialogElement>(null);
-  const historyDialog = useRef<HTMLDialogElement>(null);
-  const aboutTrigger = useRef<HTMLButtonElement>(null);
-  const diagramTrigger = useRef<HTMLButtonElement>(null);
-  const historyTrigger = useRef<HTMLButtonElement>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
-  const diagramHeading = useRef<HTMLHeadingElement>(null);
-  const { session } = practice;
-  const question = currentQuestion(session);
-  const revealed = session.phase !== "question";
-  const frame = revealed ? question.answerFrame : question.questionFrame;
+  const store = useStudy();
+  const { study, setStudy, user, ready, status, saveFailed, conflict } = store;
+  const [view, setView] = useState<View>(currentView);
+  const [accountError, setAccountError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [restore, setRestore] = useState<Study | null>(null);
+  const [restoreError, setRestoreError] = useState("");
+  const [undo, setUndo] = useState<Study | null>(null);
+  const accountDialog = useRef<HTMLDialogElement>(null);
+  const dataDialog = useRef<HTMLDialogElement>(null);
+  const accountTrigger = useRef<HTMLButtonElement>(null);
+  const dataTrigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(practice));
-      setSaveFailed(false);
-    } catch {
-      setSaveFailed(true);
-    }
-  }, [practice]);
+    const onBack = () => setView(currentView());
+    window.addEventListener("popstate", onBack);
+    return () => window.removeEventListener("popstate", onBack);
+  }, []);
 
-  function continuePractice() {
-    setPractice((value) => advance(value));
-    setNotesOpen(false);
+  useEffect(() => {
+    setRestore(null);
+    setUndo(null);
+    setRestoreError("");
+    setAccountError("");
+    setAuthBusy(false);
+    dataDialog.current?.close();
+    accountDialog.current?.close();
+  }, [user?.id]);
+
+  function navigate(next: View) {
+    setView(next);
+    history.pushState(null, "", `${location.pathname}?view=${next}`);
     requestAnimationFrame(() => {
-      heading.current?.focus();
+      document.querySelector<HTMLElement>("main h1")?.focus();
       window.scrollTo({ top: 0, behavior: "instant" });
     });
   }
 
-  function revealAnswer() {
-    setPractice((value) => ({ ...value, session: reveal(value.session) }));
-    requestAnimationFrame(() => diagramHeading.current?.focus());
+  function download(value: Study = study) {
+    if (!ready) return;
+    const url = URL.createObjectURL(
+      new Blob([backup(value)], { type: "application/json" }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `interview-practice-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   return (
     <>
-      <a className="skip-link" href="#question">
+      <a
+        className="skip-link"
+        href={
+          view === "scenario"
+            ? "#question"
+            : view === "review"
+              ? "#review-question"
+              : "#private-heading"
+        }
+      >
         Skip to the question
       </a>
-      <main>
-        <header className="session-heading">
-          <div>
-            <p className="section-label">Interview Practice / System design</p>
-            <h1>Food delivery</h1>
-            <p className="scenario-subtitle">
-              A hypothetical DoorDash-style service. Start small and reason
-              through what changes.
-            </p>
-          </div>
-          <div className="header-actions">
-            <span className="question-count">
-              Question {session.path.length}
-            </span>
-            <span className="save-status" role="status">
-              {saveFailed
-                ? "Couldn’t save on this device"
-                : "Saved on this device"}
-            </span>
-            <button
-              ref={historyTrigger}
-              className="text-button"
-              onClick={() => {
-                setHistoryOpen(true);
-                historyDialog.current?.showModal();
+      <div className="workspace-bar">
+        <nav aria-label="Study modes">
+          {(
+            [
+              ["scenario", "Scenarios"],
+              ["review", "Daily review"],
+              ["cards", "Private cards"],
+            ] as const
+          ).map(([id, label]) => (
+            <a
+              className="mode-button"
+              key={id}
+              href={`?view=${id}`}
+              aria-current={view === id ? "page" : undefined}
+              onClick={(event) => {
+                if (
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return;
+                event.preventDefault();
+                navigate(id);
               }}
             >
-              History
-              {practice.history.length > 0
-                ? ` (${practice.history.length})`
-                : ""}
-            </button>
-            <button
-              ref={aboutTrigger}
-              className="text-button"
-              onClick={() => aboutDialog.current?.showModal()}
-            >
-              About this build
-            </button>
-          </div>
-        </header>
-
-        {saveFailed && (
-          <p className="storage-error" role="alert">
-            Browser storage is unavailable. You can keep practicing, but this
-            session will be lost when you leave.
+              {label}
+            </a>
+          ))}
+        </nav>
+        <div className="workspace-tools">
+          <button
+            className="text-button"
+            ref={dataTrigger}
+            disabled={!ready}
+            onClick={() => dataDialog.current?.showModal()}
+          >
+            Backup
+          </button>
+          <button
+            className="text-button"
+            ref={accountTrigger}
+            onClick={() => accountDialog.current?.showModal()}
+          >
+            {user ? "Account" : "Sign in"}
+          </button>
+        </div>
+      </div>
+      {!ready ? (
+        <main>
+          <p className="loading-message" role="status">
+            Loading your saved practice…
           </p>
-        )}
-
-        {session.phase === "complete" ? (
-          <section className="completion" aria-labelledby="complete-heading">
-            <div className="completion-mark" aria-hidden="true">
-              <Check />
-            </div>
-            <h2 id="complete-heading" tabIndex={-1} ref={heading}>
-              Session complete.
-            </h2>
-            <p>
-              You worked through {session.path.length} questions. Another
-              session takes a different follow-up from the same starting
-              problem.
+        </main>
+      ) : (
+        <>
+          {saveFailed && view !== "scenario" && (
+            <p className="workspace-notice" role="alert">
+              Browser storage is unavailable. Keep this tab open and download a
+              backup before leaving.
             </p>
-            <ol className="completed-questions">
-              {session.path.map((id) => (
-                <li key={id}>
-                  <span>{questions[id]!.title}</span>
-                  <span className="rating-label">{session.ratings[id]}</span>
-                </li>
-              ))}
-            </ol>
-            <button
-              className="primary-button"
-              onClick={() => {
-                setPractice(restart);
-                setNotesOpen(false);
-                requestAnimationFrame(() => heading.current?.focus());
-              }}
-            >
-              Practice another path <Arrow />
-            </button>
-            <p className="small-note">
-              Your notes and ratings are saved in History.
-            </p>
-          </section>
-        ) : (
-          <>
-            <div className="study-layout">
-              <section className="question-pane" aria-labelledby="question">
-                <h2 id="question" tabIndex={-1} ref={heading}>
-                  {question.title}
-                </h2>
-                <p className="prompt">{question.prompt}</p>
-                <div className="givens">
-                  <h3>For this question</h3>
-                  <ul>
-                    {question.givens.map((given) => (
-                      <li key={given}>{given}</li>
-                    ))}
-                  </ul>
-                </div>
-                <details
-                  className="notes"
-                  key={question.id}
-                  open={notesOpen}
-                  onToggle={(event) => setNotesOpen(event.currentTarget.open)}
-                >
-                  <summary>
-                    Your thinking <span>Optional notes</span>
-                  </summary>
-                  <label className="sr-only" htmlFor="answer-notes">
-                    Your answer notes
-                  </label>
-                  <textarea
-                    id="answer-notes"
-                    name="answer-notes"
-                    rows={5}
-                    maxLength={10000}
-                    placeholder="Sketch your reasoning in a few bullets…"
-                    value={session.notes[question.id] ?? ""}
-                    onChange={(event) => {
-                      const note = event.target.value;
-                      setPractice((value) => ({
-                        ...value,
-                        session: {
-                          ...value.session,
-                          notes: {
-                            ...value.session.notes,
-                            [question.id]: note,
-                          },
-                        },
-                      }));
-                    }}
-                  />
-                  <p className="small-note">
-                    You can also answer out loud. Notes stay in this browser.
-                  </p>
-                </details>
-                {!revealed && (
-                  <div className="question-action">
-                    <button className="primary-button" onClick={revealAnswer}>
-                      Reveal answer <Arrow />
-                    </button>
-                    <p>Try an answer before you look.</p>
-                  </div>
-                )}
-              </section>
-
-              <aside className="diagram-pane" aria-labelledby="diagram-heading">
-                <div className="diagram-header">
-                  <div>
-                    <h3 id="diagram-heading" tabIndex={-1} ref={diagramHeading}>
-                      {revealed
-                        ? "Reference architecture"
-                        : "The system so far"}
-                    </h3>
-                    <p>
-                      {revealed
-                        ? "One reasonable design. New or changed components are highlighted."
-                        : "Only the givens and the design you’ve already seen."}
-                    </p>
-                  </div>
-                  <button
-                    ref={diagramTrigger}
-                    className="icon-button"
-                    aria-label="Expand architecture diagram"
-                    onClick={() => {
-                      setZoom(1);
-                      diagramDialog.current?.showModal();
-                    }}
-                  >
-                    <svg
-                      width="19"
-                      height="19"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      aria-hidden="true"
-                    >
-                      <path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5M4 4l6 6m10-6-6 6M4 20l6-6m10 6-6-6" />
-                    </svg>
-                  </button>
-                </div>
-                <Architecture frame={frame} before={question.questionFrame} />
-                {!revealed && !frame.connections.length && (
-                  <p className="diagram-empty">
-                    The architecture starts with your answer.
-                  </p>
-                )}
-                <p className="diagram-caption">
-                  {revealed
-                    ? "This is an illustrative design, not DoorDash’s production architecture."
-                    : "The next change stays hidden until you’re asked about it."}
-                </p>
-              </aside>
+          )}
+          {store.syncError && !conflict && (
+            <div className="workspace-notice" role="alert">
+              <p>{store.syncError}</p>
+              <button className="text-button" onClick={store.retrySync}>
+                Retry sync
+              </button>
             </div>
-
-            {revealed && (
-              <section className="feedback" aria-labelledby="feedback-heading">
-                <div className="feedback-main">
-                  <h2 id="feedback-heading">A way to think about it</h2>
-                  <p>{question.explanation}</p>
-                  <h3>Other valid approaches</h3>
-                  <p>{question.alternatives}</p>
-                  <div className="pitfall">
-                    <h3>Watch for</h3>
-                    <p>{question.pitfall}</p>
-                  </div>
-                  <div className="sources">
-                    <h3>Read the source</h3>
-                    {question.sources.map((source) => (
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        key={source.url}
-                      >
-                        {source.label} <span aria-hidden="true">↗</span>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-                <div className="rubric-pane">
-                  <h3>Did your answer cover these?</h3>
-                  <ul className="rubric-list">
-                    {question.rubric.map((point) => (
-                      <li key={point}>
-                        <span aria-hidden="true">
-                          <Check />
-                        </span>
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                  <fieldset className="rating">
-                    <legend>How did it go?</legend>
-                    <div className="grade-buttons">
-                      {grades.map((grade) => (
-                        <button
-                          key={grade}
-                          aria-pressed={session.ratings[question.id] === grade}
-                          disabled={session.phase === "rated"}
-                          onClick={() =>
-                            setPractice((value) => ({
-                              ...value,
-                              session: rate(value.session, grade),
-                            }))
-                          }
-                        >
-                          {grade}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="small-note">
-                      Again: missed it. Hard: correct with effort. Good: solid
-                      recall. Easy: immediate recall.
-                    </p>
-                  </fieldset>
-                  {session.phase === "rated" && (
-                    <div className="continue-action">
-                      <button
-                        className="primary-button"
-                        onClick={continuePractice}
-                      >
-                        {question.children.length
-                          ? "Continue"
-                          : "Finish session"}{" "}
-                        <Arrow />
-                      </button>
-                      {question.children.length > 0 && (
-                        <p className="small-note">
-                          The next question continues from this reference
-                          design.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
-
-            <nav className="journey" aria-label="Revealed session path">
-              <span>Your path</span>
-              <ol>
-                {session.path.map((id, index) => (
-                  <li
-                    key={id}
-                    aria-current={id === question.id ? "step" : undefined}
-                  >
-                    <span className="path-number">{index + 1}</span>
-                    <span>{questions[id]!.title}</span>
-                    {session.ratings[id] && (
-                      <span className="rating-label">
-                        {session.ratings[id]}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            </nav>
-          </>
-        )}
-      </main>
-      <footer className="app-footer">
-        <p>Practice the decisions behind the diagram.</p>
-        <span>Local preview · One scenario</span>
-      </footer>
-
-      <dialog
-        className="history-dialog"
-        ref={historyDialog}
-        onClose={() => {
-          setHistoryOpen(false);
-          historyTrigger.current?.focus({ preventScroll: true });
-        }}
-        aria-labelledby="history-heading"
-        onClick={(event) => {
-          if (event.target === event.currentTarget)
-            historyDialog.current?.close();
-        }}
-      >
-        <div className="dialog-content">
-          <div className="dialog-heading">
-            <h2 id="history-heading">Past sessions</h2>
-            <button
-              className="text-button"
-              onClick={() => historyDialog.current?.close()}
+          )}
+          {conflict && (
+            <section
+              className="conflict-notice"
+              aria-labelledby="conflict-title"
             >
-              Close
-            </button>
-          </div>
-          {historyOpen &&
-            (practice.history.length === 0 ? (
+              <h2 id="conflict-title">
+                Another device saved different changes.
+              </h2>
               <p>
-                Completed sessions appear here. Your current notes are saved as
-                you go.
+                Your draft is still here. Download it before choosing which copy
+                to continue.
               </p>
-            ) : (
-              <div className="history-sessions">
-                {practice.history.toReversed().map((past, index) => (
-                  <details
-                    className="past-session"
-                    key={practice.history.length - index}
-                    open={index === 0}
-                  >
-                    <summary>
-                      Session {practice.history.length - index}
-                      <span>{past.path.length} questions</span>
-                    </summary>
-                    {past.path.map((id) => (
-                      <article className="past-question" key={id}>
-                        <div className="past-question-heading">
-                          <h3>{questions[id]!.title}</h3>
-                          <span className="rating-label">
-                            {past.ratings[id]}
-                          </span>
-                        </div>
-                        <p>{questions[id]!.prompt}</p>
-                        {past.notes[id] ? (
-                          <div className="past-notes">
-                            <h4>Your notes</h4>
-                            <p>{past.notes[id]}</p>
-                          </div>
-                        ) : (
-                          <p className="small-note">
-                            No written notes for this question.
-                          </p>
-                        )}
-                        <details className="past-answer">
-                          <summary>Review reference answer</summary>
-                          <p>{questions[id]!.explanation}</p>
-                          <ul>
-                            {questions[id]!.rubric.map((point) => (
-                              <li key={point}>{point}</li>
-                            ))}
-                          </ul>
-                        </details>
-                      </article>
-                    ))}
-                  </details>
-                ))}
+              <div className="form-actions">
+                <button className="secondary-button" onClick={() => download()}>
+                  Download this draft
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => store.resolveConflict(false)}
+                >
+                  Use account copy
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => store.resolveConflict(true)}
+                >
+                  Keep this device’s copy
+                </button>
               </div>
-            ))}
-        </div>
-      </dialog>
+            </section>
+          )}
+          {view === "scenario" ? (
+            <Scenario
+              key={user?.id ?? "guest"}
+              practice={study.practice}
+              setPractice={(action) =>
+                setStudy((s) => ({
+                  ...s,
+                  practice:
+                    typeof action === "function" ? action(s.practice) : action,
+                }))
+              }
+              onRate={(grade) => {
+                const id = crypto.randomUUID();
+                const now = new Date();
+                setStudy((s) => rateScenario(s, grade, now, id));
+              }}
+              schedules={study.schedules}
+              saveFailed={saveFailed}
+              saveStatus={status}
+            />
+          ) : view === "review" ? (
+            <Review
+              study={study}
+              setStudy={setStudy}
+              saveStatus={saveFailed ? "Couldn’t save on this device" : status}
+            />
+          ) : (
+            <PrivateCards
+              key={user?.id ?? "guest"}
+              study={study}
+              setStudy={setStudy}
+              owner={user?.id ?? "guest"}
+            />
+          )}
+        </>
+      )}
       <dialog
-        ref={aboutDialog}
-        onClose={() => aboutTrigger.current?.focus({ preventScroll: true })}
-        aria-labelledby="about-heading"
-        onClick={(event) => {
-          if (event.target === event.currentTarget)
-            aboutDialog.current?.close();
+        ref={accountDialog}
+        aria-labelledby="account-heading"
+        onClose={() => accountTrigger.current?.focus({ preventScroll: true })}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) accountDialog.current?.close();
         }}
       >
         <div className="dialog-content">
           <div className="dialog-heading">
-            <h2 id="about-heading">A first working slice</h2>
-            <button
-              className="text-button"
-              onClick={() => aboutDialog.current?.close()}
-            >
-              Close
-            </button>
-          </div>
-          <p>
-            Practice a small food-delivery system, then take one of three
-            follow-ups. Answers and architecture changes stay hidden until you
-            reveal them.
-          </p>
-          <p>
-            This build saves your notes, self-ratings, current question, and
-            completed sessions on this device. History only includes questions
-            you have already answered. It does not yet provide spaced
-            scheduling, accounts, or sync.
-          </p>
-          <p>
-            The questions are original, hypothetical exercises with linked
-            technical references. No cloud resources are created by practicing.
-          </p>
-        </div>
-      </dialog>
-      <dialog
-        className="diagram-dialog"
-        ref={diagramDialog}
-        onClose={() => diagramTrigger.current?.focus({ preventScroll: true })}
-        aria-labelledby="expanded-heading"
-        onClick={(event) => {
-          if (event.target === event.currentTarget)
-            diagramDialog.current?.close();
-        }}
-      >
-        <div className="dialog-content">
-          <div className="dialog-heading">
-            <h2 id="expanded-heading">
-              {revealed ? "Reference architecture" : "The system so far"}
+            <h2 id="account-heading">
+              {user ? "Your account" : "Continue across devices"}
             </h2>
             <button
               className="text-button"
-              onClick={() => diagramDialog.current?.close()}
+              onClick={() => accountDialog.current?.close()}
             >
               Close
             </button>
           </div>
-          <div className="zoom-controls">
+          {user ? (
+            <>
+              <p className="account-email">{user.email}</p>
+              <p>
+                Your cards, notes, review history, and position are private to
+                this account.
+              </p>
+              <p className="account-status" role="status">
+                {status}
+              </p>
+              <div className="form-actions">
+                <button className="secondary-button" onClick={store.retrySync}>
+                  Sync now
+                </button>
+                <button
+                  className="text-button"
+                  disabled={authBusy}
+                  onClick={async () => {
+                    setAuthBusy(true);
+                    const result = await supabase!.auth.signOut({
+                      scope: "local",
+                    });
+                    setAuthBusy(false);
+                    if (result.error)
+                      setAccountError("Couldn’t sign out. Please retry.");
+                    else {
+                      accountDialog.current?.close();
+                      setUndo(null);
+                      setRestore(null);
+                    }
+                  }}
+                >
+                  Sign out of this device
+                </button>
+              </div>
+              <p className="small-note">
+                Signing out returns to this browser’s separate guest workspace.
+                Unsynced account drafts stay here for your next sign-in.
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                Sign in with Google to save privately and pick up on another
+                device. You can keep using guest practice without an account.
+              </p>
+              {supabase ? (
+                <button
+                  className="primary-button"
+                  disabled={authBusy}
+                  onClick={async () => {
+                    setAuthBusy(true);
+                    setAccountError("");
+                    const { error } = await supabase!.auth.signInWithOAuth({
+                      provider: "google",
+                      options: {
+                        redirectTo: `${location.origin}${location.pathname}?view=${view}`,
+                      },
+                    });
+                    if (error) {
+                      setAccountError(
+                        "Couldn’t start Google sign-in. Your guest work is still saved here.",
+                      );
+                      setAuthBusy(false);
+                    }
+                  }}
+                >
+                  Continue with Google <span aria-hidden="true">↗</span>
+                </button>
+              ) : (
+                <p className="account-status">
+                  Account sync is being configured for this build. Guest
+                  practice and backups are available now.
+                </p>
+              )}
+              <p className="small-note">
+                A new account starts with this device’s guest practice. Existing
+                accounts load their own saved work.
+              </p>
+            </>
+          )}
+          {accountError && (
+            <p className="form-message" role="alert">
+              {accountError}
+            </p>
+          )}
+        </div>
+      </dialog>
+      <dialog
+        ref={dataDialog}
+        aria-labelledby="backup-heading"
+        onClose={() => {
+          setRestore(null);
+          setRestoreError("");
+          dataTrigger.current?.focus({ preventScroll: true });
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) dataDialog.current?.close();
+        }}
+      >
+        <div className="dialog-content">
+          <div className="dialog-heading">
+            <h2 id="backup-heading">Your practice, in a file</h2>
             <button
-              className="icon-button"
-              aria-label="Zoom out"
-              disabled={zoom <= 0.75}
-              onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))}
+              className="text-button"
+              onClick={() => dataDialog.current?.close()}
             >
-              −
-            </button>
-            <span>{Math.round(zoom * 100)}%</span>
-            <button
-              className="icon-button"
-              aria-label="Zoom in"
-              disabled={zoom >= 2}
-              onClick={() => setZoom((value) => Math.min(2, value + 0.25))}
-            >
-              +
-            </button>
-            <button className="text-button" onClick={() => setZoom(1)}>
-              Reset
+              Close
             </button>
           </div>
-          <div className="expanded-viewport">
-            <div style={{ width: `${zoom * 100}%` }}>
-              <Architecture frame={frame} before={question.questionFrame} />
-            </div>
+          <p>
+            Export your notes, private cards, review history, schedules, and
+            session position as versioned JSON. Keep the file private.
+          </p>
+          <button className="primary-button" onClick={() => download()}>
+            Download backup
+          </button>
+          <div className="restore-section">
+            <label htmlFor="backup-file">Restore a backup</label>
+            <input
+              id="backup-file"
+              type="file"
+              accept=".json,application/json"
+              onChange={async (e) => {
+                setRestore(null);
+                setRestoreError("");
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 5 * 1024 * 1024) {
+                  setRestoreError("Choose a backup smaller than 5 MB.");
+                  return;
+                }
+                try {
+                  const restored = readBackup(await file.text());
+                  if (restored) setRestore(restored);
+                  else
+                    setRestoreError(
+                      "This file is not a compatible Interview Practice backup. Nothing was changed.",
+                    );
+                } catch {
+                  setRestoreError(
+                    "Couldn’t read that file. Nothing was changed.",
+                  );
+                }
+              }}
+            />
+            {restore && (
+              <div className="restore-preview">
+                <p>
+                  {restore.privateCards.length} private cards ·{" "}
+                  {restore.reviews.length} reviews ·{" "}
+                  {restore.practice.history.length} completed scenarios
+                </p>
+                <p>
+                  This replaces your current workspace. Download the current
+                  backup first; you can also undo this restore until you leave
+                  the page.
+                </p>
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    setUndo(study);
+                    setStudy(restore);
+                    setRestore(null);
+                    setRestoreError(
+                      "Backup restored. Your schedules and session position are ready.",
+                    );
+                  }}
+                >
+                  Restore this backup
+                </button>
+              </div>
+            )}
+            {undo && (
+              <button
+                className="text-button"
+                onClick={() => {
+                  setStudy(undo);
+                  setUndo(null);
+                  setRestoreError(
+                    "Restored the workspace from before your import.",
+                  );
+                }}
+              >
+                Undo last restore
+              </button>
+            )}
+            {restoreError && (
+              <p className="form-message" role="status">
+                {restoreError}
+              </p>
+            )}
           </div>
-          <ul className="component-list">
-            {frame.components.map((component) => (
-              <li key={component.id}>
-                <strong>{component.name}</strong>
-                <span>{component.purpose}</span>
-              </li>
-            ))}
-          </ul>
         </div>
       </dialog>
     </>

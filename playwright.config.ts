@@ -6,11 +6,16 @@ export default defineConfig({
   workers: process.env.CI ? 2 : 4,
   retries: 0,
   reporter: "list",
-  use: { baseURL: "http://127.0.0.1:4173", trace: "retain-on-failure" },
+  use: { baseURL: "http://127.0.0.1:4174", trace: "retain-on-failure" },
   webServer: {
-    command: "pnpm preview --port 4173 --strictPort",
-    url: "http://127.0.0.1:4173",
-    reuseExistingServer: !process.env.CI,
+    command:
+      "pnpm exec vite build --outDir .cache/e2e-dist && pnpm exec vite preview --outDir .cache/e2e-dist --host 127.0.0.1 --port 4174 --strictPort",
+    url: "http://127.0.0.1:4174",
+    env: {
+      VITE_SUPABASE_URL: "https://practice-test.supabase.co",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_fixture_only",
+    },
+    reuseExistingServer: false,
   },
   projects: [
     {

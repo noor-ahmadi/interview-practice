@@ -5,6 +5,9 @@ import {
   scenarioQuestions as questions,
   scenarioRevision,
   scenarioVariants,
+  scenarioFamilies,
+  foodRevision,
+  questionsForRevision,
 } from "./scenario-content.ts";
 import {
   advance,
@@ -16,6 +19,7 @@ import {
   readPractice,
   restart,
   reveal,
+  switchFamily,
 } from "./session.ts";
 import type { SavedPractice, Session } from "./session.ts";
 import { schedule } from "./scheduler.ts";
@@ -30,7 +34,13 @@ function finish(practice: SavedPractice, random = () => 0): SavedPractice {
   return practice;
 }
 
-test("both authored variants have nine coherent, fully reachable questions", () => {
+test("all six authored variants have nine coherent, fully reachable questions", () => {
+  assert.equal(scenarioVariants.length, 6);
+  for (const family of scenarioFamilies)
+    assert.equal(
+      scenarioVariants.filter((v) => v.family === family.id).length,
+      2,
+    );
   const visited = new Set<string>();
   for (const variant of scenarioVariants) {
     const before = visited.size;
@@ -101,8 +111,88 @@ test("both authored variants have nine coherent, fully reachable questions", () 
     visit(variant.root);
     assert.equal(visited.size - before, 9);
   }
-  assert.equal(visited.size, 18);
+  assert.equal(visited.size, 54);
   assert.equal(visited.size, Object.keys(questions).length);
+});
+
+test("switching families preserves each active question, notes, reveal phase and revision", () => {
+  let practice = initialPractice();
+  practice.session.revision = foodRevision;
+  practice.session.notes[rootQuestionId] = "Keep my original reasoning.";
+  practice.session = reveal(practice.session);
+  const savedFood = structuredClone(practice.session);
+  practice = switchFamily(practice, "chat", { random: () => 0 });
+  assert.equal(currentQuestion(practice.session).id, "chat-small-start");
+  practice = advance(
+    { ...practice, session: rate(reveal(practice.session), "Good") },
+    () => 0,
+  );
+  practice.session.notes["chat-live"] = "Durable first, then notify.";
+  practice.session = rate(reveal(practice.session), "Hard");
+  const savedChat = structuredClone(practice.session);
+  practice = switchFamily(practice, "shortener", { random: () => 0 });
+  assert.equal(currentQuestion(practice.session).id, "short-small-start");
+  assert.equal(practice.paused.length, 2);
+  assert.deepEqual(readPractice(JSON.stringify(practice)), practice);
+  practice = switchFamily(practice, "delivery");
+  assert.deepEqual(practice.session, savedFood);
+  practice = switchFamily(practice, "chat");
+  assert.deepEqual(practice.session, savedChat);
+  assert.equal(switchFamily(practice, "chat"), practice);
+  assert.equal(practice.history.length, 0);
+});
+
+test("each family varies starts and paths without escaping its own tree", () => {
+  for (const family of scenarioFamilies) {
+    let practice = switchFamily(initialPractice(), family.id, {
+      random: () => 0,
+    });
+    const starts = new Set<string>();
+    const paths = new Map<string, string[]>();
+    for (let i = 0; i < 6; i++) {
+      if (i) practice = restart(practice, { random: () => 0 });
+      const root = practice.session.path[0]!;
+      starts.add(root);
+      assert.equal(
+        scenarioVariants.find((v) => v.root === root)!.family,
+        family.id,
+      );
+      practice = finish(practice);
+      if (paths.has(root))
+        assert.notDeepEqual(practice.session.path, paths.get(root));
+      paths.set(root, practice.session.path);
+      assert.deepEqual(readPractice(JSON.stringify(practice)), practice);
+    }
+    assert.equal(starts.size, 2);
+  }
+});
+
+test("v3 food sessions migrate without acquiring new branches or losing history", () => {
+  const practice = finish(initialPractice());
+  practice.session.revision = foodRevision;
+  const old = { ...practice, version: 3 };
+  Reflect.deleteProperty(old, "paused");
+  const migrated = readPractice(JSON.stringify(old))!;
+  assert.equal(migrated.version, 4);
+  assert.deepEqual(migrated.paused, []);
+  assert.deepEqual(migrated.session, practice.session);
+  assert.deepEqual(migrated.history, practice.history);
+  assert.equal(Object.keys(questionsForRevision(foodRevision)).length, 18);
+  assert.equal(
+    questionsForRevision(foodRevision)["chat-small-start"],
+    undefined,
+  );
+  for (const paused of [
+    null,
+    [newSession()],
+    [practice.session],
+    [{ ...newSession("chat-small-start"), notes: { "chat-live": "Future" } }],
+    [newSession("chat-small-start"), newSession("chat-team-start")],
+  ])
+    assert.equal(
+      readPractice(JSON.stringify({ ...initialPractice(), paused })),
+      null,
+    );
 });
 
 test("weighted draws favor unseen, due and weak valid follow-ups", () => {

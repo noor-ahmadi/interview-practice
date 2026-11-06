@@ -260,7 +260,7 @@ test("an existing completed session migrates into history on reload", async ({
           )?.study.practice.version,
       ),
     )
-    .toBe(3);
+    .toBe(4);
   await page.reload();
   await page.getByRole("button", { name: "History (1)", exact: true }).click();
   const history = page.getByRole("dialog", { name: "Past sessions" });

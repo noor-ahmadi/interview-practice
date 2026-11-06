@@ -5,6 +5,7 @@ import { newStudy } from "../src/study.ts";
 import {
   scenarioQuestions as questions,
   scenarioVariants,
+  scenarioFamilies,
 } from "../src/scenario-content.ts";
 import type { Session } from "../src/session.ts";
 
@@ -217,98 +218,120 @@ function pathTo(id: string): string[] {
   return scenarioVariants.flatMap((v) => visit(v.root, []) ?? []);
 }
 
-test("every authored diagram frame fits readable labels without collisions or page overflow", async ({
-  page,
-}) => {
-  if (page.viewportSize()!.width > 1100)
-    await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/");
-  for (const q of Object.values(questions)) {
-    const study = newStudy();
-    study.practice.session.path = pathTo(q.id);
-    study.practice.session.ratings = Object.fromEntries(
-      study.practice.session.path.slice(0, -1).map((id) => [id, "Good"]),
-    ) as Session["ratings"];
-    await page.evaluate(
-      (value) =>
-        localStorage.setItem(
-          "interview-practice:study:v1:guest",
-          JSON.stringify({
-            study: value,
-            baseVersion: 0,
-            dirty: true,
-            pending: null,
-          }),
-        ),
-      study,
-    );
-    await page.reload();
-    await expect(
-      page.getByRole("heading", { name: q.title, exact: true }),
-    ).toBeVisible();
-    await page.evaluate(() => document.fonts.ready);
-    for (const phase of ["question", "answer"] as const) {
-      if (phase === "answer")
-        await page.getByRole("button", { name: "Reveal answer" }).click();
-      const frame = phase === "question" ? q.questionFrame : q.answerFrame;
-      const rendered = await page
-        .locator(".diagram-pane [data-component]")
-        .evaluateAll((nodes) =>
-          nodes.map((n) => n.getAttribute("data-component")),
+for (const family of scenarioFamilies)
+  test(`${family.name} diagram frames fit readable labels without collisions or page overflow`, async ({
+    page,
+  }) => {
+    if (page.viewportSize()!.width > 1100)
+      await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript(() => {
+      const frame = localStorage.getItem("fixture-next-frame");
+      if (frame)
+        localStorage.setItem("interview-practice:study:v1:guest", frame);
+    });
+    await page.goto("/");
+    for (const q of Object.values(questions).filter(
+      (q) =>
+        scenarioVariants.find((v) => v.root === pathTo(q.id)[0])!.family ===
+        family.id,
+    )) {
+      const study = newStudy();
+      study.practice.session.path = pathTo(q.id);
+      study.practice.session.ratings = Object.fromEntries(
+        study.practice.session.path.slice(0, -1).map((id) => [id, "Good"]),
+      ) as Session["ratings"];
+      await page.evaluate(
+        (value) =>
+          localStorage.setItem(
+            "fixture-next-frame",
+            JSON.stringify({
+              study: value,
+              baseVersion: 0,
+              dirty: true,
+              pending: null,
+            }),
+          ),
+        study,
+      );
+      await page.reload();
+      await expect(
+        page.getByRole("heading", { name: q.title, exact: true }),
+      ).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      const accessible = await page.locator("body").ariaSnapshot();
+      for (const child of q.children) {
+        expect(accessible).not.toContain(questions[child]!.title);
+        await expect(page.locator("body")).not.toContainText(
+          questions[child]!.title,
         );
-      expect(
-        rendered.every((id) => frame.components.some((c) => c.id === id)),
-      ).toBe(true);
-      const issues = await page
-        .locator(".diagram-pane .architecture")
-        .evaluate((svg) => {
-          const errors: string[] = [];
-          const nodes = [...svg.querySelectorAll<SVGGElement>(".system-node")];
-          for (const g of nodes)
-            for (const t of g.querySelectorAll<SVGTextElement>("text")) {
-              const b = t.getBBox();
-              if (b.x + b.width > 208 || b.y + b.height > 86)
-                errors.push(`Text outside component: ${t.textContent}`);
+      }
+      for (const phase of ["question", "answer"] as const) {
+        if (phase === "answer")
+          await page.getByRole("button", { name: "Reveal answer" }).click();
+        const frame = phase === "question" ? q.questionFrame : q.answerFrame;
+        const rendered = await page
+          .locator(".diagram-pane [data-component]")
+          .evaluateAll((nodes) =>
+            nodes.map((n) => n.getAttribute("data-component")),
+          );
+        expect(
+          rendered.every((id) => frame.components.some((c) => c.id === id)),
+        ).toBe(true);
+        const issues = await page
+          .locator(".diagram-pane .architecture")
+          .evaluate((svg) => {
+            const errors: string[] = [];
+            const nodes = [
+              ...svg.querySelectorAll<SVGGElement>(".system-node"),
+            ];
+            for (const g of nodes)
+              for (const t of g.querySelectorAll<SVGTextElement>("text")) {
+                const b = t.getBBox();
+                if (b.x + b.width > 208 || b.y + b.height > 86)
+                  errors.push(`Text outside component: ${t.textContent}`);
+                if (
+                  t.classList.contains("node-name") &&
+                  parseFloat(getComputedStyle(t).fontSize) *
+                    t.getScreenCTM()!.a <
+                    12
+                )
+                  errors.push(`Unreadable name: ${t.textContent}`);
+              }
+            const labels = [...svg.querySelectorAll(".connection-label")];
+            const overlaps = (a: DOMRect, b: DOMRect) =>
+              a.x < b.right - 1 &&
+              a.right > b.x + 1 &&
+              a.y < b.bottom - 1 &&
+              a.bottom > b.y + 1;
+            for (const [index, label] of labels.entries()) {
+              const rect = label.getBoundingClientRect();
               if (
-                t.classList.contains("node-name") &&
-                parseFloat(getComputedStyle(t).fontSize) * t.getScreenCTM()!.a <
-                  12
+                nodes.some((g) =>
+                  overlaps(
+                    rect,
+                    g.querySelector("rect")!.getBoundingClientRect(),
+                  ),
+                )
               )
-                errors.push(`Unreadable name: ${t.textContent}`);
+                errors.push(`Label crosses node: ${label.textContent}`);
+              if (
+                labels
+                  .slice(index + 1)
+                  .some((other) =>
+                    overlaps(rect, other.getBoundingClientRect()),
+                  )
+              )
+                errors.push(`Overlapping label: ${label.textContent}`);
             }
-          const labels = [...svg.querySelectorAll(".connection-label")];
-          const overlaps = (a: DOMRect, b: DOMRect) =>
-            a.x < b.right - 1 &&
-            a.right > b.x + 1 &&
-            a.y < b.bottom - 1 &&
-            a.bottom > b.y + 1;
-          for (const [index, label] of labels.entries()) {
-            const rect = label.getBoundingClientRect();
-            if (
-              nodes.some((g) =>
-                overlaps(
-                  rect,
-                  g.querySelector("rect")!.getBoundingClientRect(),
-                ),
-              )
-            )
-              errors.push(`Label crosses node: ${label.textContent}`);
-            if (
-              labels
-                .slice(index + 1)
-                .some((other) => overlaps(rect, other.getBoundingClientRect()))
-            )
-              errors.push(`Overlapping label: ${label.textContent}`);
-          }
-          if (document.documentElement.scrollWidth > innerWidth)
-            errors.push("Horizontal page overflow");
-          return errors;
-        });
-      expect(issues, `${q.id} ${phase}`).toEqual([]);
+            if (document.documentElement.scrollWidth > innerWidth)
+              errors.push("Horizontal page overflow");
+            return errors;
+          });
+        expect(issues, `${q.id} ${phase}`).toEqual([]);
+      }
     }
-  }
-});
+  });
 
 for (const [id, service] of [
   ["delivery-photo-cdn", "cloudfront"],

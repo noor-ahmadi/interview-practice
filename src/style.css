@@ -166,6 +166,25 @@ h1 {
   margin-top: 10px;
   max-width: 72ch;
 }
+.family-heading {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.family-heading select {
+  min-height: 44px;
+  width: auto;
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 8px 32px 8px 12px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #111;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+}
 .question-count {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;

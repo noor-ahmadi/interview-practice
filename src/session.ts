@@ -10,8 +10,9 @@ import {
   scenarioQuestions,
   scenarioRevision,
   scenarioVariants,
+  supportedRevisions,
 } from "./scenario-content.ts";
-import type { ScenarioRevision } from "./scenario-content.ts";
+import type { Family, ScenarioRevision } from "./scenario-content.ts";
 import type { ScheduledCard } from "./scheduler.ts";
 
 // Keep the existing key so earlier saves can migrate in place.
@@ -24,10 +25,11 @@ export type Session = {
   ratings: Record<string, Grade>;
 };
 export type SavedPractice = {
-  version: 3;
+  version: 4;
   session: Session;
   lastFollowup: string | null;
   history: Session[];
+  paused: Session[];
 };
 export type Selection = {
   random?: () => number;
@@ -44,7 +46,13 @@ export function newSession(
 }
 
 export function initialPractice(): SavedPractice {
-  return { version: 3, session: newSession(), lastFollowup: null, history: [] };
+  return {
+    version: 4,
+    session: newSession(),
+    lastFollowup: null,
+    history: [],
+    paused: [],
+  };
 }
 
 export function getQuestion(session: Session, id: string) {
@@ -93,13 +101,42 @@ export function restart(
   selection: Selection = {},
 ): SavedPractice {
   if (practice.session.phase !== "complete") return practice;
-  const roots = scenarioVariants.map((v) => v.root);
+  const roots = scenarioVariants
+    .filter((v) => v.family === currentVariant(practice.session).family)
+    .map((v) => v.root);
   const alternatives = roots.filter((id) => id !== practice.session.path[0]);
   return {
     ...practice,
     session: newSession(
       choose(alternatives.length ? alternatives : roots, selection),
     ),
+  };
+}
+
+export function switchFamily(
+  practice: SavedPractice,
+  family: Family,
+  selection: Selection = {},
+): SavedPractice {
+  if (currentVariant(practice.session).family === family) return practice;
+  const saved = practice.paused.find(
+    (s) => currentVariant(s).family === family,
+  );
+  const paused = practice.paused.filter((s) => s !== saved);
+  if (practice.session.phase !== "complete") paused.push(practice.session);
+  const previous = practice.history.findLast(
+    (s) => currentVariant(s).family === family,
+  );
+  const roots = scenarioVariants
+    .filter((v) => v.family === family)
+    .map((v) => v.root);
+  const alternatives = roots.filter((id) => id !== previous?.path[0]);
+  return {
+    ...practice,
+    paused,
+    session:
+      saved ??
+      newSession(choose(alternatives.length ? alternatives : roots, selection)),
   };
 }
 
@@ -158,12 +195,14 @@ function parseSession(value: unknown, legacy: boolean): Session | null {
   if (!value || typeof value !== "object") return null;
   const s = value as Session;
   const revision = legacy ? legacyRevision : s.revision;
-  if (revision !== legacyRevision && revision !== scenarioRevision) return null;
+  if (!supportedRevisions.includes(revision)) return null;
   const bank = questionsForRevision(revision);
   const roots: string[] =
     revision === legacyRevision
       ? [rootQuestionId]
-      : scenarioVariants.map((v) => v.root);
+      : scenarioVariants
+          .filter((v) => Object.hasOwn(bank, v.root))
+          .map((v) => v.root);
   if (
     !Array.isArray(s.path) ||
     !roots.includes(s.path[0]!) ||
@@ -224,7 +263,7 @@ export function readPractice(raw: string | null): SavedPractice | null {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw);
-    if (!value || ![1, 2, 3].includes(value.version)) return null;
+    if (!value || ![1, 2, 3, 4].includes(value.version)) return null;
     const session = parseSession(value.session, value.version < 3);
     if (!session) return null;
     const bank = value.version < 3 ? legacyQuestions : scenarioQuestions;
@@ -248,7 +287,29 @@ export function readPractice(raw: string | null): SavedPractice | null {
       if (!past || past.phase !== "complete") return null;
       history.push(past);
     }
-    return { version: 3, session, lastFollowup: value.lastFollowup, history };
+    const paused: Session[] = [];
+    const families = new Set([currentVariant(session).family]);
+    if (value.version === 4) {
+      if (!Array.isArray(value.paused)) return null;
+      for (const rawSession of value.paused) {
+        const saved = parseSession(rawSession, false);
+        if (
+          !saved ||
+          saved.phase === "complete" ||
+          families.has(currentVariant(saved).family)
+        )
+          return null;
+        families.add(currentVariant(saved).family);
+        paused.push(saved);
+      }
+    }
+    return {
+      version: 4,
+      session,
+      lastFollowup: value.lastFollowup,
+      history,
+      paused,
+    };
   } catch {
     return null;
   }

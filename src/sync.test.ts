@@ -9,7 +9,7 @@ import {
   readStudy,
   recordRating,
 } from "./study.ts";
-import { legacyRevision } from "./scenario-content.ts";
+import { foodRevision, legacyRevision } from "./scenario-content.ts";
 import {
   acknowledge,
   draftKey,
@@ -72,7 +72,7 @@ test("old study backups migrate without losing their active tree or independent 
   };
   const migrated = readStudy(JSON.stringify(old))!;
   assert.equal(migrated.contentRevision, contentRevision);
-  assert.equal(migrated.practice.version, 3);
+  assert.equal(migrated.practice.version, 4);
   assert.equal(migrated.practice.session.revision, legacyRevision);
   assert.equal(migrated.practice.session.phase, "feedback");
   assert.deepEqual(migrated.schedules, original.schedules);
@@ -91,6 +91,29 @@ function legacyStudy(study = newStudy()) {
   delete old.practice.session.revision;
   return old;
 }
+
+test("a pending v3 food-library write remains identical while its acknowledged view migrates", () => {
+  const old = JSON.parse(JSON.stringify(newStudy()));
+  old.contentRevision = foodRevision;
+  old.practice.version = 3;
+  old.practice.session.revision = foodRevision;
+  old.practice.session.notes["delivery-small-start"] =
+    "Saved before the family picker.";
+  delete old.practice.paused;
+  const raw = JSON.stringify(old);
+  const migrated = readStudy(raw)!;
+  const pending = { id: "food-library-write", expectedVersion: 4, study: old };
+  const result = reconcile(
+    { study: migrated, baseVersion: 4, dirty: true, pending },
+    { study: migrated, version: 5 },
+  );
+  assert.equal(result.conflict, null);
+  assert.equal(result.draft.dirty, false);
+  assert.equal(result.draft.pending, null);
+  assert.equal(result.draft.study.practice.session.revision, foodRevision);
+  assert.deepEqual(result.draft.study.practice.paused, []);
+  assert.equal(JSON.stringify(pending.study), raw);
+});
 
 test("migration preserves the exact pending request and recognizes a committed old snapshot", () => {
   const old = legacyStudy();

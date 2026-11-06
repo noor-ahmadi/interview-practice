@@ -17,7 +17,8 @@ export function useStudy() {
   const [authReady, setAuthReady] = useState(!supabase);
   const [loading, setLoading] = useState(false);
   const [cloudReady, setCloudReady] = useState(false);
-  const [loadedOwner, setLoadedOwner] = useState<string | null>(null);
+  // undefined keeps the first workspace hidden until its owner-specific draft is loaded.
+  const [loadedOwner, setLoadedOwner] = useState<string | null>();
   const [draft, setDraft] = useState(() => loadDraft(null));
   const [conflict, setConflict] = useState<RemoteStudy | null>(null);
   const [status, setStatus] = useState("Saved on this device");

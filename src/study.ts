@@ -2,7 +2,7 @@ import { recallCards } from "./cards.ts";
 import type { PrivateCard } from "./cards.ts";
 import { grades } from "./content.ts";
 import {
-  legacyRevision,
+  supportedRevisions,
   scenarioQuestions as questions,
   scenarioRevision,
 } from "./scenario-content.ts";
@@ -183,8 +183,7 @@ export function readStudy(raw: string): Study | null {
     if (
       !s ||
       s.schemaVersion !== 1 ||
-      (s.contentRevision !== legacyRevision &&
-        s.contentRevision !== contentRevision) ||
+      !supportedRevisions.includes(s.contentRevision) ||
       !readPractice(JSON.stringify(s.practice))
     )
       return null;

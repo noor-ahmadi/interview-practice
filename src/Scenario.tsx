@@ -9,7 +9,14 @@ import {
   getQuestion,
   restart,
   reveal,
+  switchFamily,
 } from "./session.ts";
+import {
+  scenarioFamilies,
+  scenarioQuestions,
+  scenarioVariants,
+} from "./scenario-content.ts";
+import type { Family } from "./scenario-content.ts";
 import type { SavedPractice } from "./session.ts";
 import type { Grade } from "./content.ts";
 import type { ScheduledCard } from "./scheduler.ts";
@@ -80,6 +87,7 @@ export function Scenario({
   const { session } = practice;
   const question = currentQuestion(session);
   const variant = currentVariant(session);
+  const family = scenarioFamilies.find((f) => f.id === variant.family)!;
   const revealed = session.phase !== "question";
   const frame = revealed ? question.answerFrame : question.questionFrame;
 
@@ -107,7 +115,32 @@ export function Scenario({
         <header className="session-heading">
           <div>
             <p className="section-label">Interview Practice / System design</p>
-            <h1 tabIndex={-1}>Food delivery</h1>
+            <div className="family-heading">
+              <h1 tabIndex={-1}>{family.name}</h1>
+              <label className="sr-only" htmlFor="scenario-family">
+                Scenario family
+              </label>
+              <select
+                id="scenario-family"
+                value={family.id}
+                onChange={(event) => {
+                  const next = event.target.value as Family;
+                  setPractice((value) =>
+                    switchFamily(value, next, { schedules, lastGrades }),
+                  );
+                  requestAnimationFrame(() => {
+                    heading.current?.focus();
+                    window.scrollTo({ top: 0, behavior: "instant" });
+                  });
+                }}
+              >
+                {scenarioFamilies.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <p className="scenario-subtitle">{variant.description}</p>
           </div>
           <div className="header-actions">
@@ -304,7 +337,7 @@ export function Scenario({
                 )}
                 <p className="diagram-caption">
                   {revealed
-                    ? "This is an illustrative design, not DoorDash’s production architecture."
+                    ? "A hypothetical reference design, not a company's production architecture."
                     : "The next change stays hidden until you’re asked about it."}
                 </p>
               </aside>
@@ -428,7 +461,10 @@ export function Scenario({
       </main>
       <footer className="app-footer">
         <p>Practice the decisions behind the diagram.</p>
-        <span>2 starting variants · 18 scenario questions</span>
+        <span>
+          {scenarioFamilies.length} families · {scenarioVariants.length}{" "}
+          starting variants · {Object.keys(scenarioQuestions).length} questions
+        </span>
       </footer>
 
       <dialog
@@ -528,10 +564,16 @@ export function Scenario({
             </button>
           </div>
           <p>
-            Food delivery has two starting variants and 18 authored questions.
-            Each session follows one path. Starting conditions and follow-ups
-            vary; future questions stay hidden until they appear. Reference
-            architectures change only when you reveal an answer.
+            Food delivery, chat, and URL shortening each have two starting
+            variants and 18 authored questions. Each session follows one path.
+            Starting conditions and follow-ups vary; future questions stay
+            hidden until they appear. Reference architectures change only when
+            you reveal an answer.
+          </p>
+          <p>
+            Switching families saves the current session. Returning restores the
+            same question, notes, and reveal state. Daily review includes 60
+            recall cards, split evenly between system design and algorithms.
           </p>
           <p>
             Each rated question gets its own FSRS schedule at a 90% recall

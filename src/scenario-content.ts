@@ -1,13 +1,32 @@
 import { questions as legacyQuestions, rootQuestionId } from "./content.ts";
 import type { Component, DiagramFrame, Question } from "./content.ts";
+import { chatQuestions, chatVariants } from "./chat-scenarios.ts";
+import {
+  shortenerQuestions,
+  shortenerVariants,
+} from "./shortener-scenarios.ts";
 
 export const legacyRevision = "2026-11-05.1";
-export const scenarioRevision = "2026-11-05.2";
-export type ScenarioRevision = typeof legacyRevision | typeof scenarioRevision;
+export const foodRevision = "2026-11-05.2";
+export const scenarioRevision = "2026-11-05.3";
+export type ScenarioRevision =
+  typeof legacyRevision | typeof foodRevision | typeof scenarioRevision;
+export const supportedRevisions: string[] = [
+  legacyRevision,
+  foodRevision,
+  scenarioRevision,
+];
+export const scenarioFamilies = [
+  { id: "delivery", name: "Food delivery" },
+  { id: "chat", name: "Chat" },
+  { id: "shortener", name: "URL shortener" },
+] as const;
+export type Family = (typeof scenarioFamilies)[number]["id"];
 
 export const scenarioVariants = [
   {
     id: "delivery-neighborhood",
+    family: "delivery",
     root: rootQuestionId,
     name: "One neighborhood restaurant",
     description:
@@ -15,11 +34,14 @@ export const scenarioVariants = [
   },
   {
     id: "delivery-preorders",
+    family: "delivery",
     root: "delivery-preorder-start",
     name: "Limited pickup portions",
     description:
       "A hypothetical restaurant preorder service. Keep limited stock correct as demand and kitchen workflows change.",
   },
+  ...chatVariants,
+  ...shortenerVariants,
 ] as const;
 
 const pg = {
@@ -363,7 +385,7 @@ const orderedStatus: DiagramFrame = {
   ),
 };
 
-export const scenarioQuestions: Record<string, Question> = {
+const foodQuestions: Record<string, Question> = {
   ...legacyQuestions,
   [rootQuestionId]: {
     ...legacyQuestions[rootQuestionId]!,
@@ -907,6 +929,16 @@ export const scenarioQuestions: Record<string, Question> = {
   },
 };
 
+export const scenarioQuestions: Record<string, Question> = {
+  ...foodQuestions,
+  ...chatQuestions,
+  ...shortenerQuestions,
+};
+
 export function questionsForRevision(revision: ScenarioRevision) {
-  return revision === legacyRevision ? legacyQuestions : scenarioQuestions;
+  return revision === legacyRevision
+    ? legacyQuestions
+    : revision === foodRevision
+      ? foodQuestions
+      : scenarioQuestions;
 }

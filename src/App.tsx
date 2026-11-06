@@ -395,7 +395,12 @@ export function App() {
                 <p>
                   {restore.privateCards.length} private cards ·{" "}
                   {restore.reviews.length} reviews ·{" "}
-                  {restore.practice.history.length} completed scenarios
+                  {restore.practice.history.length} completed scenarios ·{" "}
+                  {restore.practice.paused.length +
+                    (restore.practice.session.phase === "complete"
+                      ? 0
+                      : 1)}{" "}
+                  sessions in progress
                 </p>
                 <p>
                   This replaces your current workspace. Download the current

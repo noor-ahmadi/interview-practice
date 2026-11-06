@@ -103,6 +103,49 @@ for (const [family, paths] of [
         ? questions["chat-presence"]!.title
         : questions["short-queue-backlog"]!.title,
     );
+    const leaf = questions[paths[1].at(-1)!]!;
+    const saved = history.locator(".past-question").filter({
+      has: page.getByRole("heading", { name: leaf.title, exact: true }),
+    });
+    await saved.getByText("Review reference answer", { exact: true }).click();
+    await saved.getByRole("button", { name: "View reference diagram" }).click();
+    const diagram = page.getByRole("dialog", {
+      name: "Saved reference architecture",
+    });
+    const ids = await diagram
+      .locator("[data-component]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => node.getAttribute("data-component")).sort(),
+      );
+    expect(ids).toEqual(
+      leaf.answerFrame.components.map((component) => component.id).sort(),
+    );
+    expect(
+      (
+        await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+          .analyze()
+      ).violations,
+    ).toEqual([]);
+    for (const control of await diagram.getByRole("button").all()) {
+      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(
+      await diagram.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: info.outputPath(`${family}-saved-diagram.png`),
+      fullPage: true,
+    });
+    await page.keyboard.press("Escape");
+    await expect(
+      saved.getByRole("button", { name: "View reference diagram" }),
+    ).toBeFocused();
+    await expect(page.locator(".diagram-dialog [data-component]")).toHaveCount(
+      0,
+    );
   });
 }
 
@@ -173,13 +216,11 @@ test("family switching and backups preserve three unfinished sessions without ex
   expect(Object.keys(saved.schedules).sort()).toEqual(
     ["chat-small-start", "chat-live"].sort(),
   );
-  await page
-    .getByLabel("Restore a backup")
-    .setInputFiles({
-      name: "three-sessions.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(raw),
-    });
+  await page.getByLabel("Restore a backup").setInputFiles({
+    name: "three-sessions.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(raw),
+  });
   await page.getByRole("button", { name: "Restore this backup" }).click();
   await page.keyboard.press("Escape");
   await page.getByLabel("Scenario family").selectOption("shortener");

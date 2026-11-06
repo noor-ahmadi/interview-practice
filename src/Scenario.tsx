@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Architecture } from "./Architecture.tsx";
+import { HistoryQuestion } from "./HistoryQuestion.tsx";
 import { grades } from "./content.ts";
 import {
   advance,
@@ -18,7 +19,7 @@ import {
 } from "./scenario-content.ts";
 import type { Family } from "./scenario-content.ts";
 import type { SavedPractice } from "./session.ts";
-import type { Grade } from "./content.ts";
+import type { Grade, Question } from "./content.ts";
 import type { ScheduledCard } from "./scheduler.ts";
 import { intervalLabel, schedule } from "./scheduler.ts";
 
@@ -73,6 +74,8 @@ export function Scenario({
 }) {
   const [zoom, setZoom] = useState(1);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [diagramOpen, setDiagramOpen] = useState(false);
+  const [pastDiagram, setPastDiagram] = useState<Question | null>(null);
   const [notesOpen, setNotesOpen] = useState(
     () => !!practice.session.notes[currentQuestion(practice.session).id],
   );
@@ -90,6 +93,16 @@ export function Scenario({
   const family = scenarioFamilies.find((f) => f.id === variant.family)!;
   const revealed = session.phase !== "question";
   const frame = revealed ? question.answerFrame : question.questionFrame;
+  const expandedFrame = pastDiagram?.answerFrame ?? frame;
+  const expandedBefore = pastDiagram?.questionFrame ?? question.questionFrame;
+
+  function openDiagram(past: Question | null, trigger: HTMLButtonElement) {
+    diagramTrigger.current = trigger;
+    setPastDiagram(past);
+    setZoom(1);
+    setDiagramOpen(true);
+    diagramDialog.current?.showModal();
+  }
 
   useEffect(() => {
     setNotesOpen(!!session.notes[question.id]);
@@ -295,13 +308,9 @@ export function Scenario({
                     </p>
                   </div>
                   <button
-                    ref={diagramTrigger}
                     className="icon-button"
                     aria-label="Expand architecture diagram"
-                    onClick={() => {
-                      setZoom(1);
-                      diagramDialog.current?.showModal();
-                    }}
+                    onClick={(event) => openDiagram(null, event.currentTarget)}
                   >
                     <svg
                       width="19"
@@ -509,34 +518,13 @@ export function Scenario({
                       <span>{past.path.length} questions</span>
                     </summary>
                     {past.path.map((id) => (
-                      <article className="past-question" key={id}>
-                        <div className="past-question-heading">
-                          <h3>{getQuestion(past, id).title}</h3>
-                          <span className="rating-label">
-                            {past.ratings[id]}
-                          </span>
-                        </div>
-                        <p>{getQuestion(past, id).prompt}</p>
-                        {past.notes[id] ? (
-                          <div className="past-notes">
-                            <h4>Your notes</h4>
-                            <p>{past.notes[id]}</p>
-                          </div>
-                        ) : (
-                          <p className="small-note">
-                            No written notes for this question.
-                          </p>
-                        )}
-                        <details className="past-answer">
-                          <summary>Review reference answer</summary>
-                          <p>{getQuestion(past, id).explanation}</p>
-                          <ul>
-                            {getQuestion(past, id).rubric.map((point) => (
-                              <li key={point}>{point}</li>
-                            ))}
-                          </ul>
-                        </details>
-                      </article>
+                      <HistoryQuestion
+                        key={id}
+                        question={getQuestion(past, id)}
+                        notes={past.notes[id]}
+                        rating={past.ratings[id]}
+                        onDiagram={openDiagram}
+                      />
                     ))}
                   </details>
                 ))}
@@ -590,61 +578,75 @@ export function Scenario({
       <dialog
         className="diagram-dialog"
         ref={diagramDialog}
-        onClose={() => diagramTrigger.current?.focus({ preventScroll: true })}
+        onClose={() => {
+          setDiagramOpen(false);
+          setPastDiagram(null);
+          diagramTrigger.current?.focus({ preventScroll: true });
+        }}
         aria-labelledby="expanded-heading"
         onClick={(event) => {
           if (event.target === event.currentTarget)
             diagramDialog.current?.close();
         }}
       >
-        <div className="dialog-content">
-          <div className="dialog-heading">
-            <h2 id="expanded-heading">
-              {revealed ? "Reference architecture" : "The system so far"}
-            </h2>
-            <button
-              className="text-button"
-              onClick={() => diagramDialog.current?.close()}
-            >
-              Close
-            </button>
-          </div>
-          <div className="zoom-controls">
-            <button
-              className="icon-button"
-              aria-label="Zoom out"
-              disabled={zoom <= 0.75}
-              onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))}
-            >
-              −
-            </button>
-            <span>{Math.round(zoom * 100)}%</span>
-            <button
-              className="icon-button"
-              aria-label="Zoom in"
-              disabled={zoom >= 2}
-              onClick={() => setZoom((value) => Math.min(2, value + 0.25))}
-            >
-              +
-            </button>
-            <button className="text-button" onClick={() => setZoom(1)}>
-              Reset
-            </button>
-          </div>
-          <div className="expanded-viewport">
-            <div style={{ width: `${zoom * 100}%` }}>
-              <Architecture frame={frame} before={question.questionFrame} />
+        {diagramOpen && (
+          <div className="dialog-content">
+            <div className="dialog-heading">
+              <h2 id="expanded-heading">
+                {pastDiagram
+                  ? "Saved reference architecture"
+                  : revealed
+                    ? "Reference architecture"
+                    : "The system so far"}
+              </h2>
+              <button
+                autoFocus
+                className="text-button"
+                onClick={() => diagramDialog.current?.close()}
+              >
+                Close
+              </button>
             </div>
+            {pastDiagram && (
+              <p className="saved-diagram-title">{pastDiagram.title}</p>
+            )}
+            <div className="zoom-controls">
+              <button
+                className="icon-button"
+                aria-label="Zoom out"
+                disabled={zoom <= 0.75}
+                onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))}
+              >
+                −
+              </button>
+              <span>{Math.round(zoom * 100)}%</span>
+              <button
+                className="icon-button"
+                aria-label="Zoom in"
+                disabled={zoom >= 2}
+                onClick={() => setZoom((value) => Math.min(2, value + 0.25))}
+              >
+                +
+              </button>
+              <button className="text-button" onClick={() => setZoom(1)}>
+                Reset
+              </button>
+            </div>
+            <div className="expanded-viewport">
+              <div style={{ width: `${zoom * 100}%` }}>
+                <Architecture frame={expandedFrame} before={expandedBefore} />
+              </div>
+            </div>
+            <ul className="component-list">
+              {expandedFrame.components.map((component) => (
+                <li key={component.id}>
+                  <strong>{component.name}</strong>
+                  <span>{component.purpose}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="component-list">
-            {frame.components.map((component) => (
-              <li key={component.id}>
-                <strong>{component.name}</strong>
-                <span>{component.purpose}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        )}
       </dialog>
     </>
   );

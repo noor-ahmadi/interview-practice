@@ -267,6 +267,8 @@ test("an existing completed session migrates into history on reload", async ({
   await expect(history).toContainText("Keep my existing notes.");
   await expect(history.getByText("Hard", { exact: true })).toBeVisible();
   await expect(history).not.toContainText("The lunch rush arrives.");
+  await expect(history.locator("[data-component]")).toHaveCount(0);
+  await expect(history).not.toContainText("One application on Amazon EC2");
   await history
     .getByText("Review reference answer", { exact: true })
     .first()
@@ -274,9 +276,48 @@ test("an existing completed session migrates into history on reload", async ({
   await expect(
     history.getByText(/One application on Amazon EC2/),
   ).toBeVisible();
+  const diagramTrigger = history.getByRole("button", {
+    name: "View reference diagram",
+  });
+  await diagramTrigger.click();
+  const diagram = page.getByRole("dialog", {
+    name: "Saved reference architecture",
+  });
+  await expect(diagram).toBeVisible();
+  await expect(
+    diagram.getByRole("button", { name: "Close", exact: true }),
+  ).toBeFocused();
+  await expect(diagram.locator("[data-component]")).toHaveCount(4);
+  await expect(diagram).not.toContainText("Amazon S3");
+  await diagram.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(diagram.getByText("125%", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(diagramTrigger).toBeFocused();
+  await expect(page.locator(".diagram-dialog [data-component]")).toHaveCount(0);
+  await history
+    .getByText("Review reference answer", { exact: true })
+    .first()
+    .click();
+  await expect(history).not.toContainText("One application on Amazon EC2");
+  await history
+    .getByText("Review reference answer", { exact: true })
+    .last()
+    .click();
+  await history.getByRole("button", { name: "View reference diagram" }).click();
+  await expect(diagram.locator("[data-component]")).toHaveCount(5);
+  await expect(diagram).toContainText("Amazon S3");
+  await expect(diagram.getByText("100%", { exact: true })).toBeVisible();
+  await expect(diagram).not.toContainText("Application Load Balancer");
+  await page.keyboard.press("Escape");
   expect(
     await history.evaluate(
       (element) => element.scrollWidth <= element.clientWidth,
     ),
   ).toBe(true);
+  await history.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Practice another path" }).click();
+  await expect(page.locator("body")).not.toContainText("Amazon S3");
+  await expect(page.locator("body")).not.toContainText(
+    "Keep my existing notes.",
+  );
 });

@@ -721,6 +721,13 @@ dialog::backdrop {
 .past-question p {
   margin-top: 12px;
 }
+.past-givens {
+  padding-left: 20px;
+  margin: 16px 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
 .past-notes {
   margin-top: 18px;
 }
@@ -734,6 +741,17 @@ dialog::backdrop {
 }
 .past-answer {
   margin-top: 12px;
+}
+.past-answer h4 {
+  margin: 20px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.past-answer > button {
+  margin-top: 12px;
+}
+.saved-diagram-title {
+  margin-bottom: 20px;
 }
 .dialog-content {
   padding: 26px;

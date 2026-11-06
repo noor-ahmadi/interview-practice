@@ -160,11 +160,11 @@ test("the daily limit follows the saved timezone across local clock boundaries",
   );
 });
 
-test("the starting recall library has ten complete original items with unique IDs", () => {
-  assert.equal(recallCards.length, 10);
-  assert.equal(new Set(recallCards.map((c) => c.id)).size, 10);
+test("the launch recall library has sixty complete original items with unique IDs", () => {
+  assert.equal(recallCards.length, 60);
+  assert.equal(new Set(recallCards.map((c) => c.id)).size, 60);
   for (const topic of ["Algorithms", "System design"])
-    assert.equal(recallCards.filter((c) => c.topic === topic).length, 5);
+    assert.equal(recallCards.filter((c) => c.topic === topic).length, 30);
   for (const c of recallCards) {
     assert.ok(
       c.prompt && c.explanation && c.alternatives && c.pitfall && c.difficulty,
@@ -172,4 +172,23 @@ test("the starting recall library has ten complete original items with unique ID
     assert.ok(c.rubric.length >= 3 && c.sources.length > 0);
     assert.ok(c.sources.every((s) => new URL(s.url).protocol === "https:"));
   }
+});
+
+test("all sixty recall items can enter scheduled review without exceeding daily new-item limits", () => {
+  let study = newStudy();
+  study.timeZone = "UTC";
+  for (let day = 0; day < 12; day++) {
+    const at = new Date(now.getTime() + day * 86400000);
+    const newIds = queueFor(study, at).unseen;
+    assert.equal(newIds.length, 5);
+    for (const id of newIds)
+      study = recordRating(study, id, "Easy", at, `launch-${id}`);
+    assert.equal(queueFor(study, at).unseen.length, 0);
+  }
+  assert.deepEqual(
+    Object.keys(study.schedules).sort(),
+    recallCards.map((c) => c.id).sort(),
+  );
+  assert.equal(study.reviews.length, 60);
+  assert.deepEqual(readBackup(backup(study)), study);
 });

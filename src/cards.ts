@@ -1,3 +1,5 @@
+import { additionalCards } from "./recall-library.ts";
+
 export type RecallCard = {
   id: string;
   title: string;
@@ -206,7 +208,7 @@ export const recallCards: RecallCard[] = [
     prompt:
       "A restaurant uploads menu photos. Why put bytes in Amazon S3 and metadata in PostgreSQL? What does a presigned upload URL authorize?",
     explanation:
-      "S3 stores the image objects; PostgreSQL stores ownership, approved object keys, and relational metadata. A presigned URL temporarily authorizes a particular signed operation on a specified object, subject to its signing credentials and applicable policies. Treat it as a bearer credential. It does not validate image contents or make an object public. Upload into a private staging location, validate, and promote to a separate serving key or pin an approved version before publication.",
+      "S3 stores the image objects; PostgreSQL stores ownership, approved object keys, and relational metadata. A presigned URL temporarily authorizes a particular signed operation on a specified object, subject to its signing credentials and applicable policies. Treat it as a bearer credential. It does not validate image contents or make an object public. Upload into private staging, capture an immutable copy or pin an exact version before validation, then publish only those validated bytes.",
     rubric: [
       "Separate object bytes from relational metadata.",
       "Explain the limited signed operation and bearer access.",
@@ -243,6 +245,7 @@ export const recallCards: RecallCard[] = [
       "Inserting first when K = 0 and accidentally counting an empty subarray, or using a set that loses multiplicity.",
     sources: [algorithms],
   },
+  ...additionalCards,
 ];
 
 export type PrivateCard = {

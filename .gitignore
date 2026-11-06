@@ -5,6 +5,7 @@ dist/
 playwright-report/
 test-results/
 .cache/
+.wrangler/
 .env*
 !.env.example
 *.tsbuildinfo

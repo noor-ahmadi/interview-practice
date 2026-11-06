@@ -1,8 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { recallCards } from "./cards.ts";
-import { newStudy } from "./study.ts";
-import { acknowledge, freshDraft, reconcile } from "./sync.ts";
+import {
+  backup,
+  contentRevision,
+  newStudy,
+  readBackup,
+  readStudy,
+  recordRating,
+} from "./study.ts";
+import { legacyRevision } from "./scenario-content.ts";
+import {
+  acknowledge,
+  draftKey,
+  freshDraft,
+  loadDraft,
+  reconcile,
+} from "./sync.ts";
 
 test("cloud reconciliation preserves divergent drafts and safely acknowledges a lost response", () => {
   const original = newStudy();
@@ -25,4 +39,108 @@ test("cloud reconciliation preserves divergent drafts and safely acknowledges a 
     changed,
   );
   assert.equal(reconcile(freshDraft(), null).conflict, null);
+});
+
+test("old study backups migrate without losing their active tree or independent schedules", () => {
+  const original = recordRating(
+    newStudy(),
+    recallCards[0]!.id,
+    "Good",
+    new Date("2026-11-05T12:00:00Z"),
+    "legacy-review",
+  );
+  original.notes[recallCards[0]!.id] = "Keep this note.";
+  original.privateCards.push({
+    id: "private:00000000-0000-4000-8000-000000000001",
+    title: "My question",
+    prompt: "Why?",
+    explanation: "Because.",
+    topic: "Algorithms",
+    updatedAt: "2026-11-05T12:00:00Z",
+  });
+  original.reviewSession = {
+    ids: [recallCards[0]!.id],
+    index: 0,
+    phase: "question",
+  };
+  const old = legacyStudy(original);
+  old.practice.session = {
+    path: ["delivery-small-start", "delivery-menu-photos"],
+    phase: "feedback",
+    notes: { "delivery-menu-photos": "Still thinking." },
+    ratings: { "delivery-small-start": "Good" },
+  };
+  const migrated = readStudy(JSON.stringify(old))!;
+  assert.equal(migrated.contentRevision, contentRevision);
+  assert.equal(migrated.practice.version, 3);
+  assert.equal(migrated.practice.session.revision, legacyRevision);
+  assert.equal(migrated.practice.session.phase, "feedback");
+  assert.deepEqual(migrated.schedules, original.schedules);
+  assert.deepEqual(migrated.reviews, original.reviews);
+  assert.deepEqual(migrated.privateCards, original.privateCards);
+  assert.deepEqual(migrated.reviewSession, original.reviewSession);
+  assert.deepEqual(migrated.notes, original.notes);
+  assert.deepEqual(readBackup(backup(old)), migrated);
+  assert.deepEqual(readBackup(backup(migrated)), migrated);
+});
+
+function legacyStudy(study = newStudy()) {
+  const old = JSON.parse(JSON.stringify(study));
+  old.contentRevision = legacyRevision;
+  old.practice.version = 2;
+  delete old.practice.session.revision;
+  return old;
+}
+
+test("migration preserves the exact pending request and recognizes a committed old snapshot", () => {
+  const old = legacyStudy();
+  old.practice.session.notes["delivery-small-start"] = "Before the upgrade.";
+  const pending = { id: "old-write", expectedVersion: 7, study: old };
+  const cached = { study: old, baseVersion: 7, dirty: true, pending };
+  const values = new Map([[draftKey("fixture-owner"), JSON.stringify(cached)]]);
+  // A local storage double tests cache loading without an account or network.
+  const descriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "localStorage",
+  );
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem: (key: string) => values.get(key) ?? null },
+  });
+  try {
+    const draft = loadDraft("fixture-owner");
+    assert.equal(draft.study.contentRevision, contentRevision);
+    assert.equal(draft.study.practice.session.revision, legacyRevision);
+    assert.equal(JSON.stringify(draft.pending), JSON.stringify(pending));
+    // JSONB changes object key order at every depth, while retaining array order.
+    const migratedRemote = readStudy(
+      JSON.stringify(old, (_key, value) =>
+        value && typeof value === "object" && !Array.isArray(value)
+          ? Object.fromEntries(
+              Object.entries(value).sort(([a], [b]) => b.localeCompare(a)),
+            )
+          : value,
+      ),
+    )!;
+    const result = reconcile(draft, { study: migratedRemote, version: 8 });
+    assert.equal(result.conflict, null);
+    assert.equal(result.draft.dirty, false);
+    assert.equal(result.draft.pending, null);
+    assert.equal(result.draft.baseVersion, 8);
+    assert.equal(acknowledge(draft, pending, 8).dirty, false);
+    draft.study.practice.session.notes["delivery-small-start"] =
+      "New work while retrying.";
+    const newer = reconcile(draft, { study: migratedRemote, version: 8 });
+    assert.equal(newer.conflict, null);
+    assert.equal(newer.draft.dirty, true);
+    assert.equal(
+      newer.draft.study.practice.session.notes["delivery-small-start"],
+      "New work while retrying.",
+    );
+    assert.equal(JSON.stringify(draft.pending), JSON.stringify(pending));
+  } finally {
+    if (descriptor)
+      Object.defineProperty(globalThis, "localStorage", descriptor);
+    else Reflect.deleteProperty(globalThis, "localStorage");
+  }
 });

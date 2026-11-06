@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Architecture } from "./Architecture.tsx";
-import { grades, questions } from "./content.ts";
-import { advance, currentQuestion, restart, reveal } from "./session.ts";
+import { grades } from "./content.ts";
+import {
+  advance,
+  currentQuestion,
+  currentVariant,
+  getQuestion,
+  restart,
+  reveal,
+} from "./session.ts";
 import type { SavedPractice } from "./session.ts";
 import type { Grade } from "./content.ts";
 import type { ScheduledCard } from "./scheduler.ts";
@@ -45,6 +52,7 @@ export function Scenario({
   setPractice,
   onRate,
   schedules,
+  lastGrades,
   saveFailed,
   saveStatus,
 }: {
@@ -52,6 +60,7 @@ export function Scenario({
   setPractice: Dispatch<SetStateAction<SavedPractice>>;
   onRate: (grade: Grade) => void;
   schedules: Record<string, ScheduledCard>;
+  lastGrades: Record<string, Grade>;
   saveFailed: boolean;
   saveStatus: string;
 }) {
@@ -70,6 +79,7 @@ export function Scenario({
   const diagramHeading = useRef<HTMLHeadingElement>(null);
   const { session } = practice;
   const question = currentQuestion(session);
+  const variant = currentVariant(session);
   const revealed = session.phase !== "question";
   const frame = revealed ? question.answerFrame : question.questionFrame;
 
@@ -78,7 +88,7 @@ export function Scenario({
   }, [question.id]);
 
   function continuePractice() {
-    setPractice((value) => advance(value));
+    setPractice((value) => advance(value, { schedules, lastGrades }));
     setNotesOpen(false);
     requestAnimationFrame(() => {
       heading.current?.focus();
@@ -98,10 +108,7 @@ export function Scenario({
           <div>
             <p className="section-label">Interview Practice / System design</p>
             <h1 tabIndex={-1}>Food delivery</h1>
-            <p className="scenario-subtitle">
-              A hypothetical DoorDash-style service. Start small and reason
-              through what changes.
-            </p>
+            <p className="scenario-subtitle">{variant.description}</p>
           </div>
           <div className="header-actions">
             <span className="question-count">
@@ -150,13 +157,13 @@ export function Scenario({
             </h2>
             <p>
               You worked through {session.path.length} questions. Another
-              session takes a different follow-up from the same starting
-              problem.
+              session changes the starting conditions and takes another valid
+              path through the scenario.
             </p>
             <ol className="completed-questions">
               {session.path.map((id) => (
                 <li key={id}>
-                  <span>{questions[id]!.title}</span>
+                  <span>{getQuestion(session, id).title}</span>
                   <span className="rating-label">{session.ratings[id]}</span>
                 </li>
               ))}
@@ -164,7 +171,9 @@ export function Scenario({
             <button
               className="primary-button"
               onClick={() => {
-                setPractice(restart);
+                setPractice((value) =>
+                  restart(value, { schedules, lastGrades }),
+                );
                 setNotesOpen(false);
                 requestAnimationFrame(() => heading.current?.focus());
               }}
@@ -274,7 +283,20 @@ export function Scenario({
                     </svg>
                   </button>
                 </div>
-                <Architecture frame={frame} before={question.questionFrame} />
+                <Architecture
+                  frame={frame}
+                  before={question.questionFrame}
+                  focus={
+                    question.focus
+                      ? {
+                          ids: revealed
+                            ? question.focus.answer
+                            : question.focus.question,
+                          label: question.focus.label,
+                        }
+                      : undefined
+                  }
+                />
                 {!revealed && !frame.connections.length && (
                   <p className="diagram-empty">
                     The architecture starts with your answer.
@@ -391,7 +413,7 @@ export function Scenario({
                     aria-current={id === question.id ? "step" : undefined}
                   >
                     <span className="path-number">{index + 1}</span>
-                    <span>{questions[id]!.title}</span>
+                    <span>{getQuestion(session, id).title}</span>
                     {session.ratings[id] && (
                       <span className="rating-label">
                         {session.ratings[id]}
@@ -406,7 +428,7 @@ export function Scenario({
       </main>
       <footer className="app-footer">
         <p>Practice the decisions behind the diagram.</p>
-        <span>One scenario · 10 recall cards</span>
+        <span>2 starting variants · 18 scenario questions</span>
       </footer>
 
       <dialog
@@ -453,12 +475,12 @@ export function Scenario({
                     {past.path.map((id) => (
                       <article className="past-question" key={id}>
                         <div className="past-question-heading">
-                          <h3>{questions[id]!.title}</h3>
+                          <h3>{getQuestion(past, id).title}</h3>
                           <span className="rating-label">
                             {past.ratings[id]}
                           </span>
                         </div>
-                        <p>{questions[id]!.prompt}</p>
+                        <p>{getQuestion(past, id).prompt}</p>
                         {past.notes[id] ? (
                           <div className="past-notes">
                             <h4>Your notes</h4>
@@ -471,9 +493,9 @@ export function Scenario({
                         )}
                         <details className="past-answer">
                           <summary>Review reference answer</summary>
-                          <p>{questions[id]!.explanation}</p>
+                          <p>{getQuestion(past, id).explanation}</p>
                           <ul>
-                            {questions[id]!.rubric.map((point) => (
+                            {getQuestion(past, id).rubric.map((point) => (
                               <li key={point}>{point}</li>
                             ))}
                           </ul>
@@ -506,9 +528,10 @@ export function Scenario({
             </button>
           </div>
           <p>
-            Practice a small food-delivery system, then take one of three
-            follow-ups. Answers and architecture changes stay hidden until you
-            reveal them.
+            Food delivery has two starting variants and 18 authored questions.
+            Each session follows one path. Starting conditions and follow-ups
+            vary; future questions stay hidden until they appear. Reference
+            architectures change only when you reveal an answer.
           </p>
           <p>
             Each rated question gets its own FSRS schedule at a 90% recall

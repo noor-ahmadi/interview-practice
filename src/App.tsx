@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Scenario } from "./Scenario.tsx";
 import { Review } from "./Review.tsx";
 import { PrivateCards } from "./PrivateCards.tsx";
@@ -19,6 +19,10 @@ function currentView(): View {
 export function App() {
   const store = useStudy();
   const { study, setStudy, user, ready, status, saveFailed, conflict } = store;
+  const lastGrades = useMemo(
+    () => Object.fromEntries(study.reviews.map((r) => [r.itemId, r.grade])),
+    [study.reviews],
+  );
   const [view, setView] = useState<View>(currentView);
   const [accountError, setAccountError] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
@@ -200,6 +204,7 @@ export function App() {
                 setStudy((s) => rateScenario(s, grade, now, id));
               }}
               schedules={study.schedules}
+              lastGrades={lastGrades}
               saveFailed={saveFailed}
               saveStatus={status}
             />

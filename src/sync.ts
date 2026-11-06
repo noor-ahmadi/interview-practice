@@ -57,7 +57,7 @@ export function reconcile(
   if (
     draft.pending &&
     remote.version === draft.pending.expectedVersion + 1 &&
-    JSON.stringify(remote.study) === JSON.stringify(draft.pending.study)
+    sameStudy(remote.study, draft.pending.study)
   ) {
     return {
       draft: acknowledge(draft, draft.pending, remote.version),
@@ -85,6 +85,26 @@ export function acknowledge(
     ...draft,
     baseVersion: version,
     pending: null,
-    dirty: JSON.stringify(draft.study) !== JSON.stringify(pending.study),
+    dirty: !sameStudy(draft.study, pending.study),
   };
+}
+
+// Retry the original request bytes, but compare the views after content migration.
+function sameStudy(a: Study, b: Study) {
+  const left = readStudy(JSON.stringify(a));
+  const right = readStudy(JSON.stringify(b));
+  return (
+    left !== null && right !== null && canonical(left) === canonical(right)
+  );
+}
+
+// PostgreSQL JSONB does not preserve object-key order; array order is meaningful.
+function canonical(study: Study) {
+  return JSON.stringify(study, (_key, value) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.entries(value).sort(([a], [b]) => a.localeCompare(b)),
+        )
+      : value,
+  );
 }

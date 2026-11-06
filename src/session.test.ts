@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { grades, questions, rootQuestionId } from "./content.ts";
+import { legacyRevision } from "./scenario-content.ts";
 import {
   advance,
   currentQuestion,
@@ -11,6 +12,13 @@ import {
   restart,
   reveal,
 } from "./session.ts";
+
+function legacyPractice() {
+  return {
+    ...initialPractice(),
+    session: newSession(rootQuestionId, legacyRevision),
+  };
+}
 
 test("an answer must be revealed and rated before advancing", () => {
   const practice = initialPractice();
@@ -57,7 +65,7 @@ test("a new session avoids the last follow-up when alternatives exist", () => {
 });
 
 test("completion preserves notes and independent self-ratings", () => {
-  let practice = initialPractice();
+  let practice = legacyPractice();
   practice.session = rate(reveal(practice.session), "Easy");
   practice = advance(practice, () => 0.5);
   const id = currentQuestion(practice.session).id;
@@ -76,7 +84,7 @@ test("save round-trips keep the exact question, notes, and reveal phase", () => 
   for (const phase of ["question", "feedback", "rated", "complete"] as const) {
     let practice = initialPractice();
     practice.session = rate(reveal(practice.session), "Good");
-    practice = advance(practice, () => 0.5);
+    practice = advance(practice, () => 0.99);
     practice.session.notes[currentQuestion(practice.session).id] =
       "My reasoning";
     if (phase !== "question") practice.session = reveal(practice.session);
@@ -152,7 +160,7 @@ test("content has a reachable tree and coherent frames without sibling changes",
 });
 
 function completedPractice() {
-  let practice = initialPractice();
+  let practice = legacyPractice();
   practice.session.notes[rootQuestionId] =
     "One application and a durable database.";
   practice.session = rate(reveal(practice.session), "Good");
@@ -171,7 +179,7 @@ test("completion archives once and restarting preserves previous notes and grade
   const next = restart(practice);
   assert.equal(next.lastFollowup, practice.lastFollowup);
   assert.equal(next.history.length, 1);
-  assert.deepEqual(next.session, newSession());
+  assert.deepEqual(next.session, newSession("delivery-preorder-start"));
   assert.equal(restart(next), next);
   next.session = rate(reveal(next.session), "Again");
   assert.deepEqual(next.history[0], archived);
@@ -179,12 +187,12 @@ test("completion archives once and restarting preserves previous notes and grade
 });
 
 test("legacy saves migrate without losing notes, ratings, or reveal state", () => {
-  const feedback = initialPractice();
+  const feedback = legacyPractice();
   feedback.session.notes[rootQuestionId] = "My existing reasoning.";
   feedback.session = reveal(feedback.session);
   const rated = { ...feedback, session: rate(feedback.session, "Good") };
   for (const practice of [
-    initialPractice(),
+    legacyPractice(),
     feedback,
     rated,
     completedPractice(),
@@ -194,7 +202,16 @@ test("legacy saves migrate without losing notes, ratings, or reveal state", () =
       session: practice.session,
       lastFollowup: practice.lastFollowup,
     };
-    assert.deepEqual(readPractice(JSON.stringify(legacy)), practice);
+    for (const version of [1, 2]) {
+      const migrated = readPractice(
+        JSON.stringify({ ...legacy, version, history: practice.history }),
+      );
+      assert.deepEqual(migrated, practice);
+      assert.equal(
+        currentQuestion(migrated!.session).children.length,
+        questions[currentQuestion(practice.session).id]!.children.length,
+      );
+    }
   }
 });
 

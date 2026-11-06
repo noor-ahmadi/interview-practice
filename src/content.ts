@@ -8,8 +8,16 @@ export type Component = {
   kind: "person" | "compute" | "database" | "storage" | "network";
   x: number;
   y: number;
+  service?: "ec2" | "rds" | "s3" | "alb" | "sqs" | "elasticache" | "cloudfront";
+  unavailable?: boolean;
 };
-export type Connection = { from: string; to: string; label: string };
+export type Connection = {
+  from: string;
+  to: string;
+  label: string;
+  via?: { x: number; y: number }[];
+  labelAt?: { x: number; y: number };
+};
 export type DiagramFrame = {
   components: Component[];
   connections: Connection[];
@@ -27,6 +35,8 @@ export type Question = {
   questionFrame: DiagramFrame;
   answerFrame: DiagramFrame;
   children: string[];
+  difficulty?: "Foundation" | "Intermediate";
+  focus?: { question: string[]; answer: string[]; label: string };
 };
 
 const customer: Component = {

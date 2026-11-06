@@ -6,6 +6,24 @@ test("questions and solutions appear only when revealed, including after reload"
 }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  // Exercise a real v2 save through the old two-question tree.
+  await page.addInitScript(() => {
+    if (!localStorage.getItem("interview-practice:study:v1:guest"))
+      localStorage.setItem(
+        "interview-practice:v1",
+        JSON.stringify({
+          version: 2,
+          lastFollowup: null,
+          history: [],
+          session: {
+            path: ["delivery-small-start"],
+            phase: "question",
+            notes: {},
+            ratings: {},
+          },
+        }),
+      );
+  });
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Start with ten customers." }),
@@ -113,11 +131,15 @@ test("questions and solutions appear only when revealed, including after reload"
   });
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "The lunch rush arrives." }),
+    page.getByRole("heading", {
+      name: "Two customers reserve the last portion.",
+    }),
   ).toBeVisible();
-  await expect(page.locator("body")).not.toContainText("AWS ALB");
+  await expect(page.locator("body")).not.toContainText("Atomic stock + orders");
   await page.getByRole("button", { name: "Reveal answer" }).click();
-  await expect(page.locator(".diagram-pane")).toContainText("AWS ALB");
+  await expect(page.locator(".diagram-pane")).toContainText(
+    "Atomic stock + orders",
+  );
   expect(errors).toEqual([]);
 });
 
@@ -238,7 +260,7 @@ test("an existing completed session migrates into history on reload", async ({
           )?.study.practice.version,
       ),
     )
-    .toBe(2);
+    .toBe(3);
   await page.reload();
   await page.getByRole("button", { name: "History (1)", exact: true }).click();
   const history = page.getByRole("dialog", { name: "Past sessions" });

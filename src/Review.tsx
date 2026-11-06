@@ -1,7 +1,8 @@
 import { useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Architecture } from "./Architecture.tsx";
-import { grades, questions } from "./content.ts";
+import { grades } from "./content.ts";
+import { scenarioQuestions as questions } from "./scenario-content.ts";
 import { recallCards } from "./cards.ts";
 import {
   beginReview,
@@ -171,6 +172,16 @@ export function Review({
                       revealed ? scenario.answerFrame : scenario.questionFrame
                     }
                     before={scenario.questionFrame}
+                    focus={
+                      scenario.focus
+                        ? {
+                            ids: revealed
+                              ? scenario.focus.answer
+                              : scenario.focus.question,
+                            label: scenario.focus.label,
+                          }
+                        : undefined
+                    }
                   />
                 </aside>
               )}

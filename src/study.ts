@@ -1,13 +1,18 @@
 import { recallCards } from "./cards.ts";
 import type { PrivateCard } from "./cards.ts";
-import { grades, questions } from "./content.ts";
+import { grades } from "./content.ts";
+import {
+  legacyRevision,
+  scenarioQuestions as questions,
+  scenarioRevision,
+} from "./scenario-content.ts";
 import type { Grade } from "./content.ts";
 import { initialPractice, rate, readPractice } from "./session.ts";
 import type { SavedPractice } from "./session.ts";
 import { schedule, validSchedule } from "./scheduler.ts";
 import type { ScheduledCard } from "./scheduler.ts";
 
-export const contentRevision = "2026-11-05.1";
+export const contentRevision = scenarioRevision;
 export type ReviewEvent = {
   id: string;
   itemId: string;
@@ -178,7 +183,8 @@ export function readStudy(raw: string): Study | null {
     if (
       !s ||
       s.schemaVersion !== 1 ||
-      s.contentRevision !== contentRevision ||
+      (s.contentRevision !== legacyRevision &&
+        s.contentRevision !== contentRevision) ||
       !readPractice(JSON.stringify(s.practice))
     )
       return null;
@@ -272,7 +278,11 @@ export function readStudy(raw: string): Study | null {
           ))
     )
       return null;
-    return { ...s, practice: readPractice(JSON.stringify(s.practice))! };
+    return {
+      ...s,
+      contentRevision,
+      practice: readPractice(JSON.stringify(s.practice))!,
+    };
   } catch {
     return null;
   }

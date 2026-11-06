@@ -17,6 +17,18 @@ const user = {
 };
 const token = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString("base64url")}.${Buffer.from(JSON.stringify({ sub: userId, role: "authenticated", exp: 5000000000 })).toString("base64url")}.fixture-signature`;
 
+function jsonb(study: Study): Study {
+  return JSON.parse(
+    JSON.stringify(study, (_key, value) =>
+      value && typeof value === "object" && !Array.isArray(value)
+        ? Object.fromEntries(
+            Object.entries(value).sort(([a], [b]) => b.localeCompare(a)),
+          )
+        : value,
+    ),
+  );
+}
+
 async function accountFixture(page: Page) {
   const server = {
     version: 1,
@@ -58,7 +70,7 @@ async function accountFixture(page: Page) {
     if (path === "/auth/v1/user") return route.fulfill({ json: user, headers });
     if (path === "/rest/v1/study_state")
       return route.fulfill({
-        json: [{ version: server.version, payload: server.study }],
+        json: [{ version: server.version, payload: jsonb(server.study) }],
         headers,
       });
     if (path === "/rest/v1/rpc/commit_study") {
@@ -74,7 +86,7 @@ async function accountFixture(page: Page) {
           json: {
             status: "conflict",
             version: server.version,
-            payload: server.study,
+            payload: jsonb(server.study),
           },
           headers,
         });

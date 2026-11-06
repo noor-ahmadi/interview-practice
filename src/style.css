@@ -951,6 +951,41 @@ dialog::backdrop {
   padding-bottom: 10px;
   border-bottom: 1px solid #262626;
 }
+.diagram-focus {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 16px;
+}
+.architecture.compact {
+  flex: none;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+}
+.diagram-pane .architecture.focused {
+  flex: none;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  max-width: 640px;
+  margin-inline: auto;
+}
+.diagram-pane .architecture.compact {
+  max-width: 360px;
+}
+.focused-connections {
+  width: 100%;
+}
+.focused-connections ol {
+  margin-top: 8px;
+}
+.system-node.unavailable rect {
+  stroke: #e8b388;
+}
+.system-node.unavailable .node-purpose {
+  fill: #e8b388;
+}
 .workspace-bar nav,
 .workspace-tools,
 .form-actions {

@@ -8,8 +8,8 @@ import {
 } from "./scenario-content.ts";
 import type { Grade } from "./content.ts";
 import { initialPractice, rate, readPractice } from "./session.ts";
-import type { SavedPractice } from "./session.ts";
-import { schedule, validSchedule } from "./scheduler.ts";
+import type { SavedPractice, Session } from "./session.ts";
+import { rollback, schedule, validSchedule } from "./scheduler.ts";
 import type { ScheduledCard } from "./scheduler.ts";
 
 export const contentRevision = scenarioRevision;
@@ -27,6 +27,7 @@ export type ReviewSession = {
   ids: string[];
   index: number;
   phase: "question" | "feedback" | "rated" | "complete";
+  ratingId?: string;
 };
 export type Study = {
   schemaVersion: 1;
@@ -115,6 +116,7 @@ export function recordRating(
   if (
     !findItem(study, itemId) ||
     !grades.includes(grade) ||
+    !eventId ||
     study.reviews.some((e) => e.id === eventId)
   )
     return study;
@@ -145,9 +147,21 @@ export function rateScenario(
   const before = study.practice.session;
   const after = rate(before, grade);
   if (after === before) return study;
+  const itemId = before.path.at(-1)!;
+  const previous =
+    before.phase === "rated"
+      ? openRating(study, itemId, before.ratingId)
+      : undefined;
+  const updated = previous
+    ? amendRating(study, previous.id, grade)
+    : recordRating(study, itemId, grade, now, eventId);
+  if (updated === study) return study;
   return {
-    ...recordRating(study, before.path.at(-1)!, grade, now, eventId),
-    practice: { ...study.practice, session: after },
+    ...updated,
+    practice: {
+      ...study.practice,
+      session: { ...after, ratingId: previous?.id ?? eventId },
+    },
   };
 }
 
@@ -158,23 +172,87 @@ export function rateReview(
   eventId: string,
 ): Study {
   const session = study.reviewSession;
-  if (!session || session.phase !== "feedback") return study;
+  if (!session || !["feedback", "rated"].includes(session.phase)) return study;
+  const itemId = session.ids[session.index]!;
+  const previous =
+    session.phase === "rated"
+      ? openRating(study, itemId, session.ratingId)
+      : undefined;
+  const updated = previous
+    ? amendRating(study, previous.id, grade)
+    : recordRating(study, itemId, grade, now, eventId);
+  if (updated === study) return study;
   return {
-    ...recordRating(study, session.ids[session.index]!, grade, now, eventId),
-    reviewSession: { ...session, phase: "rated" },
+    ...updated,
+    reviewSession: {
+      ...session,
+      phase: "rated",
+      ratingId: previous?.id ?? eventId,
+    },
   };
 }
 
 export function nextReview(study: Study): Study {
   const s = study.reviewSession;
   if (!s || s.phase !== "rated") return study;
+  const { ratingId: _ratingId, ...finished } = s;
   return {
     ...study,
     reviewSession:
       s.index + 1 === s.ids.length
-        ? { ...s, phase: "complete" }
-        : { ...s, index: s.index + 1, phase: "question" },
+        ? { ...finished, phase: "complete" }
+        : { ...finished, index: s.index + 1, phase: "question" },
   };
+}
+
+export function openRating(study: Study, itemId: string, ratingId?: string) {
+  return ratingId !== undefined
+    ? study.reviews.find(
+        (event) => event.id === ratingId && event.itemId === itemId,
+      )
+    : undefined;
+}
+
+function amendRating(study: Study, eventId: string, grade: Grade): Study {
+  const index = study.reviews.findIndex((event) => event.id === eventId);
+  const event = study.reviews[index];
+  if (!event || !grades.includes(grade) || event.grade === grade) return study;
+  const current = study.schedules[event.itemId];
+  if (!current) return study;
+  const tail = study.reviews
+    .slice(index)
+    .filter((review) => review.itemId === event.itemId);
+  // Rewind the item's later reviews and replay them at their original times.
+  let card = tail.reduceRight(
+    (card, review) => rollback(card, review.log),
+    current,
+  );
+  const amended = new Map<string, ReviewEvent>();
+  for (const review of tail) {
+    const choice = review.id === eventId ? grade : review.grade;
+    const result = schedule(card, event.itemId, choice, new Date(review.at));
+    card = result.card;
+    amended.set(review.id, { ...review, grade: choice, log: result.log });
+  }
+  return {
+    ...study,
+    schedules: { ...study.schedules, [event.itemId]: card },
+    reviews: study.reviews.map((review) => amended.get(review.id) ?? review),
+  };
+}
+
+export function ratingOptions(
+  study: Study,
+  itemId: string,
+  review?: ReviewEvent,
+) {
+  const now = new Date();
+  return grades.map((grade) => ({
+    grade,
+    dueAt: review
+      ? amendRating(study, review.id, grade).schedules[itemId]!.dueAt
+      : schedule(study.schedules[itemId], itemId, grade, now).card.dueAt,
+  }));
 }
 
 export function readStudy(raw: string): Study | null {
@@ -183,10 +261,11 @@ export function readStudy(raw: string): Study | null {
     if (
       !s ||
       s.schemaVersion !== 1 ||
-      !supportedRevisions.includes(s.contentRevision) ||
-      !readPractice(JSON.stringify(s.practice))
+      !supportedRevisions.includes(s.contentRevision)
     )
       return null;
+    const practice = readPractice(JSON.stringify(s.practice));
+    if (!practice) return null;
     // Validate every restored field before it can enter the rendered UI or scheduler.
     if (
       !Array.isArray(s.privateCards) ||
@@ -228,7 +307,9 @@ export function readStudy(raw: string): Study | null {
         (e) =>
           e &&
           typeof e.id === "string" &&
+          e.id.length > 0 &&
           findItem(s, e.itemId) &&
+          s.schedules[e.itemId] &&
           grades.includes(e.grade) &&
           Number.isFinite(Date.parse(e.at)) &&
           typeof e.day === "string" &&
@@ -237,12 +318,27 @@ export function readStudy(raw: string): Study | null {
           e.log &&
           e.log.cardId === e.itemId &&
           e.log.rating === grades.indexOf(e.grade) + 1 &&
-          e.log.reviewTime === e.at,
+          e.log.reviewTime === e.at &&
+          validSchedule({ ...e.log, reps: 0, lapses: 0 }),
       )
     )
       return null;
     if (new Set(s.reviews.map((e) => e.id)).size !== s.reviews.length)
       return null;
+    const openSessions = [practice.session, ...practice.paused];
+    const claimed = new Set<string>();
+    for (const session of openSessions) {
+      if (session.ratingId !== undefined) {
+        const event = openRating(s, session.path.at(-1)!, session.ratingId);
+        if (
+          !event ||
+          event.grade !== session.ratings[event.itemId] ||
+          claimed.has(event.id)
+        )
+          return null;
+        claimed.add(event.id);
+      }
+    }
     if (
       !s.notes ||
       Array.isArray(s.notes) ||
@@ -270,6 +366,11 @@ export function readStudy(raw: string): Study | null {
         r.index >= r.ids.length ||
         !["question", "feedback", "rated", "complete"].includes(r.phase) ||
         (r.phase === "complete" && r.index !== r.ids.length - 1) ||
+        (r.ratingId !== undefined &&
+          (typeof r.ratingId !== "string" ||
+            r.phase !== "rated" ||
+            claimed.has(r.ratingId) ||
+            !openRating(s, r.ids[r.index]!, r.ratingId))) ||
         !r.ids
           .slice(0, r.index + (["rated", "complete"].includes(r.phase) ? 1 : 0))
           .every(
@@ -277,10 +378,39 @@ export function readStudy(raw: string): Study | null {
           ))
     )
       return null;
+
+    // Earlier saves had only the selected grade. Bind an open legacy rating to
+    // its latest matching event so future reviews cannot take its place.
+    if (r?.ratingId) claimed.add(r.ratingId);
+    const legacyEvent = (itemId: string, grade?: Grade) => {
+      const event = s.reviews.findLast(
+        (event) =>
+          event.itemId === itemId &&
+          !claimed.has(event.id) &&
+          (grade === undefined || grade === event.grade),
+      );
+      if (event) claimed.add(event.id);
+      return event?.id;
+    };
+    const bindLegacy = (session: Session): Session => {
+      if (session.phase !== "rated" || session.ratingId) return session;
+      const itemId = session.path.at(-1)!;
+      const ratingId = legacyEvent(itemId, session.ratings[itemId]);
+      return ratingId ? { ...session, ratingId } : session;
+    };
+    const dailyId =
+      r?.phase === "rated" && !r.ratingId
+        ? legacyEvent(r.ids[r.index]!)
+        : undefined;
     return {
       ...s,
       contentRevision,
-      practice: readPractice(JSON.stringify(s.practice))!,
+      practice: {
+        ...practice,
+        session: bindLegacy(practice.session),
+        paused: practice.paused.map(bindLegacy),
+      },
+      reviewSession: r && dailyId ? { ...r, ratingId: dailyId } : r,
     };
   } catch {
     return null;

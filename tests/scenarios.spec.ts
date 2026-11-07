@@ -23,6 +23,13 @@ async function diagram(page: Page) {
     .evaluate((el) => el.outerHTML);
 }
 
+function serviceIcon(page: Page, service: string) {
+  const path = `/aws/${service}.svg`;
+  return page.locator(
+    `.diagram-pane :is(image[href="${path}"], img[src="${path}"])`,
+  );
+}
+
 test("longer sessions hide future branches, preserve reveals, and alternate starting conditions", async ({
   page,
 }, testInfo) => {
@@ -52,22 +59,16 @@ test("longer sessions hide future branches, preserve reveals, and alternate star
       questions[id]!.title,
     );
   }
-  await expect(
-    page.locator('.diagram-pane image[href="/aws/alb.svg"]'),
-  ).toHaveCount(0);
+  await expect(serviceIcon(page, "alb")).toHaveCount(0);
   await page.getByRole("button", { name: "Reveal answer" }).click();
-  await expect(
-    page.locator('.diagram-pane image[href="/aws/alb.svg"]'),
-  ).toHaveCount(1);
+  await expect(serviceIcon(page, "alb")).toHaveCount(1);
   await next(page, 0.99);
   await expect(
     page.getByRole("heading", {
       name: questions["delivery-receipt-queue"]!.title,
     }),
   ).toBeVisible();
-  await expect(
-    page.locator('.diagram-pane image[href="/aws/sqs.svg"]'),
-  ).toHaveCount(0);
+  await expect(serviceIcon(page, "sqs")).toHaveCount(0);
   const before = await diagram(page);
   await page.locator(".notes summary").click();
   await page
@@ -78,17 +79,13 @@ test("longer sessions hide future branches, preserve reveals, and alternate star
   await expect(page.getByLabel("Your answer notes")).toHaveValue(
     "Commit the order and its event together.",
   );
-  await expect(
-    page.locator('.diagram-pane image[href="/aws/sqs.svg"]'),
-  ).toHaveCount(0);
+  await expect(serviceIcon(page, "sqs")).toHaveCount(0);
   await page.screenshot({
     path: testInfo.outputPath("receipt-question.png"),
     fullPage: true,
   });
   await page.getByRole("button", { name: "Reveal answer" }).click();
-  await expect(
-    page.locator('.diagram-pane image[href="/aws/sqs.svg"]'),
-  ).toHaveCount(1);
+  await expect(serviceIcon(page, "sqs")).toHaveCount(1);
   await expect(
     page.locator(".diagram-pane [data-component='worker']"),
   ).toHaveCount(1);
@@ -109,9 +106,7 @@ test("longer sessions hide future branches, preserve reveals, and alternate star
   await expect(
     page.getByRole("button", { name: "Finish session" }),
   ).toBeVisible();
-  await expect(
-    page.locator('.diagram-pane image[href="/aws/sqs.svg"]'),
-  ).toHaveCount(1);
+  await expect(serviceIcon(page, "sqs")).toHaveCount(1);
   await page.getByRole("button", { name: "Finish session" }).click();
   await page.getByRole("button", { name: "Practice another path" }).click();
   await expect(
@@ -278,10 +273,43 @@ for (const family of scenarioFamilies)
         expect(
           rendered.every((id) => frame.components.some((c) => c.id === id)),
         ).toBe(true);
+        const flows = page.locator(".diagram-pane .component-flow");
+        if (await flows.count()) {
+          const connections = await flows
+            .locator(".flow-connections li")
+            .evaluateAll((rows) =>
+              rows.map((row) => [
+                row.closest("[data-component]")!.getAttribute("data-component"),
+                row.querySelector("strong")!.textContent,
+                row.querySelector("small")!.textContent,
+              ]),
+            );
+          const expected = frame.connections
+            .filter(
+              (link) =>
+                rendered.includes(link.from) && rendered.includes(link.to),
+            )
+            .map((link) => [
+              link.from,
+              frame.components.find((c) => c.id === link.to)!.name,
+              link.label,
+            ]);
+          expect(connections.sort()).toEqual(expected.sort());
+        }
         const issues = await page
           .locator(".diagram-pane .architecture")
           .evaluate((svg) => {
             const errors: string[] = [];
+            for (const node of svg.querySelectorAll<HTMLElement>(
+              ".flow-node",
+            )) {
+              if (node.scrollWidth > node.clientWidth + 1)
+                errors.push(`Component overflows: ${node.dataset.component}`);
+              for (const label of node.querySelectorAll("strong, small")) {
+                if (parseFloat(getComputedStyle(label).fontSize) < 12)
+                  errors.push(`Unreadable label: ${label.textContent}`);
+              }
+            }
             const nodes = [
               ...svg.querySelectorAll<SVGGElement>(".system-node"),
             ];
@@ -376,14 +404,9 @@ for (const [id, service] of [
       ).toHaveCount(0);
     const before = await diagram(page);
     await page.reload();
-    // SVG IDs are stable within a page; compare the actual components and framing on reload.
-    expect(
-      await page.locator(".diagram-pane .architecture").getAttribute("viewBox"),
-    ).toBe(before.match(/viewBox="([^"]+)"/)![1]);
+    expect(await diagram(page)).toBe(before);
     await page.getByRole("button", { name: "Reveal answer" }).click();
-    await expect(
-      page.locator(`.diagram-pane image[href="/aws/${service}.svg"]`),
-    ).toHaveCount(1);
+    await expect(serviceIcon(page, service!)).toHaveCount(1);
     if (id === "delivery-cache-outage")
       await expect(
         page.locator('.diagram-pane [data-component="cache"]'),
@@ -402,8 +425,11 @@ for (const [id, service] of [
     await expect(modal.locator(".component-list li")).toHaveCount(
       question.answerFrame.components.length,
     );
+    const descriptions = (await modal.locator(".component-flow").count())
+      ? modal.locator(".component-flow")
+      : modal.locator(".component-list");
     for (const c of question.answerFrame.components)
-      await expect(modal.locator(".component-list")).toContainText(c.purpose);
+      await expect(descriptions).toContainText(c.purpose);
     expect(
       (
         await new AxeBuilder({ page })

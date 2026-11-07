@@ -31,8 +31,8 @@ export function App() {
   const [undo, setUndo] = useState<Study | null>(null);
   const accountDialog = useRef<HTMLDialogElement>(null);
   const dataDialog = useRef<HTMLDialogElement>(null);
-  const accountTrigger = useRef<HTMLButtonElement>(null);
-  const dataTrigger = useRef<HTMLButtonElement>(null);
+  const optionsTrigger = useRef<HTMLButtonElement>(null);
+  const optionsPanel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onBack = () => setView(currentView());
@@ -90,7 +90,7 @@ export function App() {
           {(
             [
               ["scenario", "Scenarios"],
-              ["review", "Daily review"],
+              ["review", "Review"],
               ["cards", "Private cards"],
             ] as const
           ).map(([id, label]) => (
@@ -98,6 +98,7 @@ export function App() {
               className="mode-button"
               key={id}
               href={`?view=${id}`}
+              aria-label={id === "review" ? "Daily review" : undefined}
               aria-current={view === id ? "page" : undefined}
               onClick={(event) => {
                 if (
@@ -116,21 +117,51 @@ export function App() {
             </a>
           ))}
         </nav>
-        <div className="workspace-tools">
-          <button
-            className="text-button"
-            ref={dataTrigger}
-            disabled={!ready}
-            onClick={() => dataDialog.current?.showModal()}
+        <button
+          className="options-trigger"
+          type="button"
+          ref={optionsTrigger}
+          popoverTarget="workspace-options"
+          aria-label="More options"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="22"
+            height="22"
+            fill="currentColor"
+            aria-hidden="true"
           >
-            Backup
-          </button>
+            <circle cx="5" cy="12" r="1.65" />
+            <circle cx="12" cy="12" r="1.65" />
+            <circle cx="19" cy="12" r="1.65" />
+          </svg>
+        </button>
+        <div
+          id="workspace-options"
+          className="workspace-options"
+          ref={optionsPanel}
+          popover="auto"
+          role="group"
+          aria-label="Study options"
+        >
           <button
-            className="text-button"
-            ref={accountTrigger}
-            onClick={() => accountDialog.current?.showModal()}
+            type="button"
+            onClick={() => {
+              optionsPanel.current?.hidePopover();
+              accountDialog.current?.showModal();
+            }}
           >
             {user ? "Account" : "Sign in"}
+          </button>
+          <button
+            type="button"
+            disabled={!ready}
+            onClick={() => {
+              optionsPanel.current?.hidePopover();
+              dataDialog.current?.showModal();
+            }}
+          >
+            Backup
           </button>
         </div>
       </div>
@@ -190,7 +221,7 @@ export function App() {
           {view === "scenario" ? (
             <Scenario
               key={user?.id ?? "guest"}
-              practice={study.practice}
+              study={study}
               setPractice={(action) =>
                 setStudy((s) => ({
                   ...s,
@@ -203,7 +234,6 @@ export function App() {
                 const now = new Date();
                 setStudy((s) => rateScenario(s, grade, now, id));
               }}
-              schedules={study.schedules}
               lastGrades={lastGrades}
               saveFailed={saveFailed}
               saveStatus={status}
@@ -227,7 +257,7 @@ export function App() {
       <dialog
         ref={accountDialog}
         aria-labelledby="account-heading"
-        onClose={() => accountTrigger.current?.focus({ preventScroll: true })}
+        onClose={() => optionsTrigger.current?.focus({ preventScroll: true })}
         onClick={(e) => {
           if (e.target === e.currentTarget) accountDialog.current?.close();
         }}
@@ -338,7 +368,7 @@ export function App() {
         onClose={() => {
           setRestore(null);
           setRestoreError("");
-          dataTrigger.current?.focus({ preventScroll: true });
+          optionsTrigger.current?.focus({ preventScroll: true });
         }}
         onClick={(e) => {
           if (e.target === e.currentTarget) dataDialog.current?.close();

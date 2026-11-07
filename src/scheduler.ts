@@ -27,6 +27,14 @@ function hydrate(card: ScheduledCard): DefaultSchedulerCard<"FSRS-6"> {
   };
 }
 
+function serialize(card: DefaultSchedulerCard<"FSRS-6">): ScheduledCard {
+  return {
+    ...card,
+    dueAt: card.dueAt.toISOString(),
+    lastReviewAt: card.lastReviewAt?.toISOString() ?? null,
+  };
+}
+
 export function schedule(
   card: ScheduledCard | undefined,
   id: string,
@@ -38,11 +46,7 @@ export function schedule(
     : { ...scheduler.newCard({ now }), cardId: id };
   const result = scheduler.review({ card: before, grade: Rating[grade], now });
   return {
-    card: {
-      ...result.card,
-      dueAt: result.card.dueAt.toISOString(),
-      lastReviewAt: result.card.lastReviewAt?.toISOString() ?? null,
-    } satisfies ScheduledCard,
+    card: serialize(result.card),
     log: {
       ...result.revlog,
       dueAt: result.revlog.dueAt.toISOString(),
@@ -52,6 +56,23 @@ export function schedule(
   };
 }
 
+export function rollback(
+  card: ScheduledCard,
+  log: ReturnType<typeof schedule>["log"],
+) {
+  return serialize(
+    scheduler.rollback({
+      card: hydrate(card),
+      revlog: {
+        ...log,
+        dueAt: new Date(log.dueAt),
+        lastReviewAt: log.lastReviewAt ? new Date(log.lastReviewAt) : null,
+        reviewTime: new Date(log.reviewTime),
+      },
+    }),
+  );
+}
+
 export function intervalLabel(dueAt: string, now = new Date()): string {
   const minutes = Math.max(
     1,
@@ -59,7 +80,8 @@ export function intervalLabel(dueAt: string, now = new Date()): string {
   );
   if (minutes < 60) return `${minutes} min`;
   if (minutes < 1440) return `${Math.round(minutes / 60)} hr`;
-  return `${Math.round(minutes / 1440)} days`;
+  const days = Math.round(minutes / 1440);
+  return days === 1 ? "1 day" : `${days} days`;
 }
 
 export function validSchedule(value: unknown): value is ScheduledCard {

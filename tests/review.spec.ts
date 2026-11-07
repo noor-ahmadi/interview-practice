@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { readFile } from "node:fs/promises";
+import { recallCards } from "../src/cards.ts";
+import { scenarioQuestions } from "../src/scenario-content.ts";
 
 test("a complete daily review resumes, hides answers, and respects the new-item limit", async ({
   page,
@@ -9,12 +11,36 @@ test("a complete daily review resumes, hides answers, and respects the new-item 
   await expect(
     page.getByRole("heading", { name: "Daily review", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".review-stats")).toContainText(
-    "New available today5",
-  );
-  await page.getByRole("button", { name: "Start review" }).click();
+  await expect(page.locator(".review-stats")).toContainText("New today5");
+  const options = page.getByRole("button", { name: "More options" });
+  const navTargets = await page
+    .locator(".workspace-bar :is(a, .options-trigger)")
+    .evaluateAll((targets) =>
+      targets.map((target) => {
+        const { top, width, height } = target.getBoundingClientRect();
+        return { top, width, height };
+      }),
+    );
+  expect(
+    navTargets.every(
+      ({ top, width, height }) =>
+        top === navTargets[0]!.top && width >= 44 && height >= 44,
+    ),
+  ).toBe(true);
+  await options.focus();
+  await page.keyboard.press("Enter");
   await expect(
-    page.getByRole("heading", { name: "A cache is not the source of truth." }),
+    page.getByRole("group", { name: "Study options" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(options).toBeFocused();
+  await page.getByRole("button", { name: "Start review" }).click();
+  await expect(page.locator(".review-stats")).toHaveCount(0);
+  await expect(
+    page.getByText(recallCards[0]!.title, { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: recallCards[0]!.prompt, exact: true }),
   ).toBeVisible();
   await expect(page.locator("body")).not.toContainText("stale-fill race");
   await expect(
@@ -36,18 +62,23 @@ test("a complete daily review resumes, hides answers, and respects the new-item 
         .analyze()
     ).violations,
   ).toEqual([]);
+  await page.getByRole("button", { name: "Hard", exact: true }).click();
+  await page.reload();
+  const hard = page.getByRole("button", { name: "Hard", exact: true });
+  const easy = page.getByRole("button", { name: "Easy", exact: true });
+  await expect(hard).toHaveAttribute("aria-pressed", "true");
+  await easy.click();
+  await expect(hard).toHaveAttribute("aria-pressed", "false");
+  await expect(easy).toHaveAttribute("aria-pressed", "true");
   await page.screenshot({
     path: info.outputPath("recall-answer.png"),
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Easy", exact: true }).click();
   await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Easy", exact: true }),
-  ).toBeDisabled();
+  await expect(easy).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Next question" }).click();
   await expect(
-    page.getByRole("heading", { name: "Find the first true position." }),
+    page.getByRole("heading", { name: recallCards[1]!.prompt, exact: true }),
   ).toBeFocused();
   await expect(page.locator("body")).not.toContainText(
     "Everything before lo is false",
@@ -113,6 +144,8 @@ test("private drafts survive reload, editing keeps IDs, and backups restore the 
     path: info.outputPath("private-cards.png"),
     fullPage: true,
   });
+  const options = page.getByRole("button", { name: "More options" });
+  await options.click();
   await page.getByRole("button", { name: "Backup", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Your practice, in a file" });
   const downloadEvent = page.waitForEvent("download");
@@ -121,33 +154,28 @@ test("private drafts survive reload, editing keeps IDs, and backups restore the 
   const payload = JSON.parse(await readFile((await download.path())!, "utf8"));
   expect(payload.study.privateCards).toHaveLength(1);
   payload.study.privateCards[0].title = "Restored card";
-  await dialog
-    .getByLabel("Restore a backup")
-    .setInputFiles({
-      name: "backup.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(payload)),
-    });
+  await dialog.getByLabel("Restore a backup").setInputFiles({
+    name: "backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(payload)),
+  });
   await dialog.getByRole("button", { name: "Restore this backup" }).click();
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator(".private-library")).toContainText("Restored card");
+  await options.click();
   await page.getByRole("button", { name: "Backup", exact: true }).click();
   await dialog.getByRole("button", { name: "Undo last restore" }).click();
-  await dialog
-    .getByLabel("Restore a backup")
-    .setInputFiles({
-      name: "broken.json",
-      mimeType: "application/json",
-      buffer: Buffer.from('{"version":999}'),
-    });
+  await dialog.getByLabel("Restore a backup").setInputFiles({
+    name: "broken.json",
+    mimeType: "application/json",
+    buffer: Buffer.from('{"version":999}'),
+  });
   await expect(dialog).toContainText("Nothing was changed.");
   await expect(
     dialog.getByRole("button", { name: "Restore this backup" }),
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("button", { name: "Backup", exact: true }),
-  ).toBeFocused();
+  await expect(options).toBeFocused();
   await expect(page.locator(".private-library")).toContainText(
     "Explain the boundary",
   );
@@ -176,7 +204,9 @@ test("rated scenarios enter daily review without scheduling or exposing their ch
   await page.reload();
   await page.getByRole("button", { name: "Start review" }).click();
   await expect(
-    page.getByRole("heading", { name: "Start with ten customers." }),
+    page.getByRole("heading", {
+      name: scenarioQuestions["delivery-small-start"]!.prompt,
+    }),
   ).toBeVisible();
   await expect(page.locator("[data-component]")).toHaveCount(2);
   await expect(page.locator("body")).not.toContainText(

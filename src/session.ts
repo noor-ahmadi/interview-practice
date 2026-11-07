@@ -23,6 +23,7 @@ export type Session = {
   phase: "question" | "feedback" | "rated" | "complete";
   notes: Record<string, string>;
   ratings: Record<string, Grade>;
+  ratingId?: string;
 };
 export type SavedPractice = {
   version: 4;
@@ -147,7 +148,12 @@ export function reveal(session: Session): Session {
 }
 
 export function rate(session: Session, grade: Grade): Session {
-  if (session.phase !== "feedback" || !grades.includes(grade)) return session;
+  if (
+    !["feedback", "rated"].includes(session.phase) ||
+    !grades.includes(grade) ||
+    session.ratings[currentQuestion(session).id] === grade
+  )
+    return session;
   return {
     ...session,
     phase: "rated",
@@ -163,9 +169,10 @@ export function advance(
     typeof options === "function" ? { random: options } : options;
   const { session } = practice;
   if (session.phase !== "rated") return practice;
+  const { ratingId: _ratingId, ...finished } = session;
   const children = currentQuestion(session).children;
   if (!children.length) {
-    const completed: Session = { ...session, phase: "complete" };
+    const completed: Session = { ...finished, phase: "complete" };
     return {
       ...practice,
       session: completed,
@@ -187,7 +194,11 @@ export function advance(
   return {
     ...practice,
     lastFollowup: next,
-    session: { ...session, path: [...session.path, next], phase: "question" },
+    session: {
+      ...finished,
+      path: [...session.path, next],
+      phase: "question",
+    },
   };
 }
 
@@ -242,6 +253,13 @@ function parseSession(value: unknown, legacy: boolean): Session | null {
     return null;
   const last = bank[s.path.at(-1)!]!;
   if (
+    s.ratingId !== undefined &&
+    (typeof s.ratingId !== "string" ||
+      !s.ratingId.length ||
+      s.phase !== "rated")
+  )
+    return null;
+  if (
     ["rated", "complete"].includes(s.phase) &&
     !grades.includes(s.ratings[last.id]!)
   )
@@ -255,6 +273,7 @@ function parseSession(value: unknown, legacy: boolean): Session | null {
     phase: s.phase,
     notes: s.notes,
     ratings: s.ratings,
+    ...(s.ratingId === undefined ? {} : { ratingId: s.ratingId }),
   };
 }
 

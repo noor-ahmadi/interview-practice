@@ -56,8 +56,23 @@ test("rating a scenario schedules only that question and a duplicate cannot coun
   assert.equal(s.reviews.length, 1);
   for (const child of questions[rootQuestionId]!.children)
     assert.equal(s.schedules[child], undefined);
-  assert.equal(rateScenario(s, "Easy", now, "second-tap"), s);
+  assert.equal(rateScenario(s, "Good", now, "second-tap"), s);
   assert.equal(recordRating(s, rootQuestionId, "Good", now, "event"), s);
+  const changed = rateScenario(
+    s,
+    "Easy",
+    new Date(now.getTime() + 2000),
+    "edit",
+  );
+  assert.equal(changed.reviews.length, 1);
+  assert.equal(changed.reviews[0]!.id, "event");
+  assert.equal(changed.reviews[0]!.at, now.toISOString());
+  assert.equal(changed.practice.session.ratings[rootQuestionId], "Easy");
+  assert.deepEqual(
+    changed.schedules[rootQuestionId],
+    schedule(undefined, rootQuestionId, "Easy", now).card,
+  );
+  assert.deepEqual(readBackup(backup(changed)), changed);
 });
 
 test("daily selection is due-first, capped at five new items, and independent of session restarts", () => {
@@ -90,11 +105,59 @@ test("review resumes the selected queue and phase without rerolling", () => {
     beginReview(s, new Date("2026-11-06T12:00:00Z")).reviewSession!.ids,
     ids,
   );
-  assert.equal(rateReview(s, "Good", now, "repeat-tap"), s);
+  assert.equal(rateReview(s, "Again", now, "repeat-tap"), s);
+  const legacy = structuredClone(s);
+  delete legacy.reviewSession!.ratingId;
+  s = readStudy(JSON.stringify(legacy))!;
+  s = rateReview(s, "Good", now, "edit");
+  assert.deepEqual(
+    s.reviews.map(({ id, grade }) => ({ id, grade })),
+    [{ id: "first", grade: "Good" }],
+  );
+  assert.deepEqual(
+    s.schedules[ids[0]!],
+    schedule(undefined, ids[0]!, "Good", now).card,
+  );
   s = nextReview(s);
   assert.equal(s.reviewSession!.index, 1);
   assert.equal(s.reviewSession!.phase, "question");
   assert.equal(s.reviews.length, 1);
+});
+
+test("changing an open scenario rating replays later reviews of the same question", () => {
+  const id = rootQuestionId;
+  const introduced = recordRating(newStudy(), id, "Good", now, "introduced");
+  const next = new Date(introduced.schedules[id]!.dueAt);
+  const graduated = recordRating(introduced, id, "Good", next, "graduated");
+  const due = new Date(graduated.schedules[id]!.dueAt);
+  const feedback = {
+    ...graduated,
+    practice: {
+      ...graduated.practice,
+      session: reveal(graduated.practice.session),
+    },
+  };
+  let s = rateScenario(feedback, "Again", due, "scenario");
+  assert.equal(s.schedules[id]!.lapses, 1);
+  const later = new Date(s.schedules[id]!.dueAt);
+  s = beginReview(s, later);
+  assert.equal(s.reviewSession!.ids[0], id);
+  s = { ...s, reviewSession: { ...s.reviewSession!, phase: "feedback" } };
+  s = rateReview(s, "Good", later, "daily");
+  s = rateScenario(s, "Easy", later, "edit");
+  const expected = schedule(graduated.schedules[id], id, "Easy", due);
+  assert.deepEqual(
+    s.schedules[id],
+    schedule(expected.card, id, "Good", later).card,
+  );
+  assert.deepEqual(
+    s.reviews.slice(-2).map(({ id, grade }) => ({ id, grade })),
+    [
+      { id: "scenario", grade: "Easy" },
+      { id: "daily", grade: "Good" },
+    ],
+  );
+  assert.deepEqual(readBackup(backup(s)), s);
 });
 
 test("private cards and scheduled reviews round-trip through a versioned backup", () => {

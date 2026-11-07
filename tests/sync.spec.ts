@@ -118,6 +118,8 @@ test("an existing account loads its own work and sign-out returns to a separate 
   await expect(page.getByLabel("Your answer notes")).toHaveValue(
     "Account-only reasoning",
   );
+  const options = page.getByRole("button", { name: "More options" });
+  await options.click();
   await page.getByRole("button", { name: "Account", exact: true }).click();
   const account = page.getByRole("dialog", { name: "Your account" });
   await expect(account).toContainText("learner@example.test");
@@ -131,10 +133,13 @@ test("an existing account loads its own work and sign-out returns to a separate 
   await account
     .getByRole("button", { name: "Sign out of this device" })
     .click();
+  await expect(page.getByLabel("Your answer notes")).toHaveValue("");
+  await expect(account).toBeHidden();
+  await options.click();
   await expect(
     page.getByRole("button", { name: "Sign in", exact: true }),
   ).toBeVisible();
-  await expect(page.getByLabel("Your answer notes")).toHaveValue("");
+  await page.keyboard.press("Escape");
   await expect(page.locator("body")).not.toContainText(
     "Account-only reasoning",
   );

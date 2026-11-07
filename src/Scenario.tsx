@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Architecture } from "./Architecture.tsx";
 import { HistoryQuestion } from "./HistoryQuestion.tsx";
-import { grades } from "./content.ts";
+import { RatingChoices } from "./RatingChoices.tsx";
 import {
   advance,
   currentQuestion,
@@ -12,16 +12,12 @@ import {
   reveal,
   switchFamily,
 } from "./session.ts";
-import {
-  scenarioFamilies,
-  scenarioQuestions,
-  scenarioVariants,
-} from "./scenario-content.ts";
+import { scenarioFamilies } from "./scenario-content.ts";
 import type { Family } from "./scenario-content.ts";
 import type { SavedPractice } from "./session.ts";
 import type { Grade, Question } from "./content.ts";
-import type { ScheduledCard } from "./scheduler.ts";
-import { intervalLabel, schedule } from "./scheduler.ts";
+import { openRating, ratingOptions } from "./study.ts";
+import type { Study } from "./study.ts";
 
 function Arrow() {
   return (
@@ -56,22 +52,21 @@ function Check() {
 }
 
 export function Scenario({
-  practice,
+  study,
   setPractice,
   onRate,
-  schedules,
   lastGrades,
   saveFailed,
   saveStatus,
 }: {
-  practice: SavedPractice;
+  study: Study;
   setPractice: Dispatch<SetStateAction<SavedPractice>>;
   onRate: (grade: Grade) => void;
-  schedules: Record<string, ScheduledCard>;
   lastGrades: Record<string, Grade>;
   saveFailed: boolean;
   saveStatus: string;
 }) {
+  const { practice, schedules } = study;
   const [zoom, setZoom] = useState(1);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [diagramOpen, setDiagramOpen] = useState(false);
@@ -79,16 +74,18 @@ export function Scenario({
   const [notesOpen, setNotesOpen] = useState(
     () => !!practice.session.notes[currentQuestion(practice.session).id],
   );
-  const aboutDialog = useRef<HTMLDialogElement>(null);
   const diagramDialog = useRef<HTMLDialogElement>(null);
   const historyDialog = useRef<HTMLDialogElement>(null);
-  const aboutTrigger = useRef<HTMLButtonElement>(null);
   const diagramTrigger = useRef<HTMLButtonElement>(null);
   const historyTrigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const diagramHeading = useRef<HTMLHeadingElement>(null);
   const { session } = practice;
   const question = currentQuestion(session);
+  const selected =
+    session.phase === "rated"
+      ? openRating(study, question.id, session.ratingId)
+      : undefined;
   const variant = currentVariant(session);
   const family = scenarioFamilies.find((f) => f.id === variant.family)!;
   const revealed = session.phase !== "question";
@@ -175,13 +172,6 @@ export function Scenario({
               {practice.history.length > 0
                 ? ` (${practice.history.length})`
                 : ""}
-            </button>
-            <button
-              ref={aboutTrigger}
-              className="text-button"
-              onClick={() => aboutDialog.current?.showModal()}
-            >
-              About this build
             </button>
           </div>
         </header>
@@ -389,40 +379,11 @@ export function Scenario({
                       </li>
                     ))}
                   </ul>
-                  <fieldset className="rating">
-                    <legend>How did it go?</legend>
-                    <div className="grade-buttons">
-                      {grades.map((grade) => (
-                        <button
-                          key={grade}
-                          aria-label={grade}
-                          aria-pressed={session.ratings[question.id] === grade}
-                          disabled={session.phase === "rated"}
-                          onClick={() => onRate(grade)}
-                        >
-                          {grade}
-                          <span className="grade-interval">
-                            {session.phase === "rated"
-                              ? session.ratings[question.id] === grade
-                                ? "Scheduled"
-                                : ""
-                              : intervalLabel(
-                                  schedule(
-                                    schedules[question.id],
-                                    question.id,
-                                    grade,
-                                    new Date(),
-                                  ).card.dueAt,
-                                )}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="small-note">
-                      Again: missed it. Hard: correct with effort. Good: solid
-                      recall. Easy: immediate recall.
-                    </p>
-                  </fieldset>
+                  <RatingChoices
+                    options={ratingOptions(study, question.id, selected)}
+                    selected={session.ratings[question.id]}
+                    onRate={onRate}
+                  />
                   {session.phase === "rated" && (
                     <div className="continue-action">
                       <button
@@ -468,13 +429,6 @@ export function Scenario({
           </>
         )}
       </main>
-      <footer className="app-footer">
-        <p>Practice the decisions behind the diagram.</p>
-        <span>
-          {scenarioFamilies.length} families · {scenarioVariants.length}{" "}
-          starting variants · {Object.keys(scenarioQuestions).length} questions
-        </span>
-      </footer>
 
       <dialog
         className="history-dialog"
@@ -530,49 +484,6 @@ export function Scenario({
                 ))}
               </div>
             ))}
-        </div>
-      </dialog>
-      <dialog
-        ref={aboutDialog}
-        onClose={() => aboutTrigger.current?.focus({ preventScroll: true })}
-        aria-labelledby="about-heading"
-        onClick={(event) => {
-          if (event.target === event.currentTarget)
-            aboutDialog.current?.close();
-        }}
-      >
-        <div className="dialog-content">
-          <div className="dialog-heading">
-            <h2 id="about-heading">Practice that comes back</h2>
-            <button
-              className="text-button"
-              onClick={() => aboutDialog.current?.close()}
-            >
-              Close
-            </button>
-          </div>
-          <p>
-            Food delivery, chat, and URL shortening each have two starting
-            variants and 18 authored questions. Each session follows one path.
-            Starting conditions and follow-ups vary; future questions stay
-            hidden until they appear. Reference architectures change only when
-            you reveal an answer.
-          </p>
-          <p>
-            Switching families saves the current session. Returning restores the
-            same question, notes, and reveal state. Daily review includes 60
-            recall cards, split evenly between system design and algorithms.
-          </p>
-          <p>
-            Each rated question gets its own FSRS schedule at a 90% recall
-            target. Daily review mixes due questions with up to five new cards a
-            day. Your notes, ratings, and position save on this device. Sign in
-            when account sync is available to continue across devices.
-          </p>
-          <p>
-            The questions are original, hypothetical exercises with linked
-            technical references. No cloud resources are created by practicing.
-          </p>
         </div>
       </dialog>
       <dialog
@@ -633,7 +544,9 @@ export function Scenario({
               </button>
             </div>
             <div className="expanded-viewport">
-              <div style={{ width: `${zoom * 100}%` }}>
+              <div
+                style={{ width: `${zoom * 100}%`, fontSize: `${zoom * 100}%` }}
+              >
                 <Architecture frame={expandedFrame} before={expandedBefore} />
               </div>
             </div>

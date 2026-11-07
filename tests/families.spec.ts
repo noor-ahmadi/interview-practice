@@ -202,7 +202,12 @@ test("family switching and backups preserve three unfinished sessions without ex
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Hard", exact: true }),
-  ).toBeDisabled();
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Good", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Good", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "More options" }).click();
   await page.getByRole("button", { name: "Backup", exact: true }).click();
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download backup" }).click();
@@ -213,6 +218,9 @@ test("family switching and backups preserve three unfinished sessions without ex
   expect(saved.practice.paused).toHaveLength(2);
   expect(saved.practice.session.path.at(-1)).toBe("chat-live");
   expect(saved.practice.session.phase).toBe("rated");
+  expect(
+    saved.reviews.filter((r: { itemId: string }) => r.itemId === "chat-live"),
+  ).toMatchObject([{ grade: "Good" }]);
   expect(Object.keys(saved.schedules).sort()).toEqual(
     ["chat-small-start", "chat-live"].sort(),
   );

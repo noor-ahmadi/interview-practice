@@ -85,58 +85,6 @@ export function Architecture({
       ordering.indexOf(id) < 0 ? ordering.length : ordering.indexOf(id);
     return rank(a.id) - rank(b.id);
   });
-  const components = sorted.map((component, index) =>
-    narrow
-      ? { ...component, x: 20, y: 20 + index * 120 }
-      : focused
-        ? {
-            ...component,
-            ...[
-              { x: 20, y: 20 },
-              { x: 320, y: 20 },
-              { x: 320, y: 220 },
-              { x: 20, y: 220 },
-            ][index]!,
-          }
-        : component,
-  );
-  const viaPoints =
-    narrow || focused ? [] : frame.connections.flatMap((e) => e.via ?? []);
-  const minX =
-    narrow || focused
-      ? 0
-      : Math.max(
-          0,
-          Math.min(
-            ...components.map((c) => c.x),
-            ...viaPoints.map((p) => p.x),
-          ) - 24,
-        );
-  const minY =
-    narrow || focused
-      ? 0
-      : Math.max(
-          0,
-          Math.min(
-            ...components.map((c) => c.y),
-            ...viaPoints.map((p) => p.y),
-          ) - 24,
-        );
-  const width = narrow
-    ? Math.max(320, 290 + (frame.connections.length - 1) * 10)
-    : Math.max(
-        ...components.map((c) => c.x + nodeWidth),
-        ...viaPoints.map((p) => p.x),
-      ) +
-      24 -
-      minX;
-  const height =
-    Math.max(
-      ...components.map((c) => c.y + nodeHeight),
-      ...viaPoints.map((p) => p.y),
-    ) +
-    28 -
-    minY;
   const changed = (component: Component) => {
     const old = before.components.find((item) => item.id === component.id);
     return (
@@ -146,6 +94,113 @@ export function Architecture({
       !!old.unavailable !== !!component.unavailable
     );
   };
+  const focusCaption = focused && (
+    <p className="diagram-focus">
+      {focus!.label} · {frame.components.length} of{" "}
+      {fullFrame.components.length} established components
+    </p>
+  );
+
+  if (narrow) {
+    return (
+      <>
+        {focusCaption}
+        <ul
+          className="architecture component-flow"
+          role="list"
+          aria-label="Current system architecture"
+        >
+          {sorted.map((component) => {
+            const icon = component.service ?? icons[component.id];
+            const outgoing = frame.connections.filter(
+              (link) => link.from === component.id,
+            );
+            return (
+              <li
+                key={component.id}
+                className={`flow-node${changed(component) ? " changed" : ""}${component.unavailable ? " unavailable" : ""}`}
+                data-component={component.id}
+              >
+                <div className="flow-name">
+                  {icon && <img src={`/aws/${icon}.svg`} alt="" />}
+                  <strong>{component.name}</strong>
+                </div>
+                <p>{component.purpose}</p>
+                {outgoing.length > 0 && (
+                  <ul
+                    className="flow-connections"
+                    role="list"
+                    aria-label={`Connections from ${component.name}`}
+                  >
+                    {outgoing.map((link) => (
+                      <li key={link.to}>
+                        <span aria-hidden="true">→</span>
+                        <div>
+                          <strong>
+                            {
+                              frame.components.find(
+                                (target) => target.id === link.to,
+                              )!.name
+                            }
+                          </strong>
+                          <small>{link.label}</small>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </>
+    );
+  }
+
+  const components = sorted.map((component, index) =>
+    focused
+      ? {
+          ...component,
+          ...[
+            { x: 20, y: 20 },
+            { x: 320, y: 20 },
+            { x: 320, y: 220 },
+            { x: 20, y: 220 },
+          ][index]!,
+        }
+      : component,
+  );
+  const viaPoints = focused
+    ? []
+    : frame.connections.flatMap((e) => e.via ?? []);
+  const minX = focused
+    ? 0
+    : Math.max(
+        0,
+        Math.min(...components.map((c) => c.x), ...viaPoints.map((p) => p.x)) -
+          24,
+      );
+  const minY = focused
+    ? 0
+    : Math.max(
+        0,
+        Math.min(...components.map((c) => c.y), ...viaPoints.map((p) => p.y)) -
+          24,
+      );
+  const width =
+    Math.max(
+      ...components.map((c) => c.x + nodeWidth),
+      ...viaPoints.map((p) => p.x),
+    ) +
+    24 -
+    minX;
+  const height =
+    Math.max(
+      ...components.map((c) => c.y + nodeHeight),
+      ...viaPoints.map((p) => p.y),
+    ) +
+    28 -
+    minY;
   const connectionList = (
     <ol>
       {frame.connections.map((connection) => (
@@ -162,14 +217,9 @@ export function Architecture({
 
   return (
     <>
-      {focused && (
-        <p className="diagram-focus">
-          {focus!.label} · {frame.components.length} of{" "}
-          {fullFrame.components.length} established components
-        </p>
-      )}
+      {focusCaption}
       <svg
-        className={`architecture${narrow ? " compact" : ""}${focused ? " focused" : ""}`}
+        className={`architecture${focused ? " focused" : ""}`}
         viewBox={`${minX} ${minY} ${width} ${height}`}
         role="img"
         aria-labelledby={`${id}-title ${id}-description`}
@@ -210,12 +260,7 @@ export function Architecture({
           let path: string;
           let labelX: number;
           let labelY: number;
-          if (narrow) {
-            const lane = 258 + index * 10;
-            path = `M${from.x + nodeWidth} ${from.y + 44} H${lane} V${to.y + 44} H${to.x + nodeWidth + 3}`;
-            labelX = lane + 8;
-            labelY = (from.y + to.y) / 2 + 48;
-          } else if (connection.via?.length && !focused) {
+          if (connection.via?.length && !focused) {
             const start = port(from, connection.via[0]!);
             const end = port(to, connection.via.at(-1)!, true);
             path = `M${start.x} ${start.y} ${connection.via.map((p) => `L${p.x} ${p.y}`).join(" ")} L${end.x} ${end.y}`;
@@ -235,7 +280,7 @@ export function Architecture({
             labelX = middleX;
             labelY = from.y === to.y ? from.y - 14 : (from.y + to.y) / 2 + 28;
           }
-          if (connection.labelAt && !narrow && !focused) {
+          if (connection.labelAt && !focused) {
             labelX = connection.labelAt.x;
             labelY = connection.labelAt.y;
           }
@@ -250,9 +295,9 @@ export function Architecture({
                 className="connection-label"
                 x={labelX}
                 y={labelY}
-                textAnchor={narrow ? "start" : "middle"}
+                textAnchor="middle"
               >
-                {narrow || focused ? index + 1 : connection.label}
+                {focused ? index + 1 : connection.label}
               </text>
             </g>
           );

@@ -28,7 +28,8 @@ test("an answer must be revealed and rated before advancing", () => {
   assert.equal(advance({ ...practice, session: feedback }).session, feedback);
   const rated = rate(feedback, "Good");
   assert.equal(rated.ratings[rootQuestionId], "Good");
-  assert.equal(rate(rated, "Again"), rated);
+  assert.equal(rate(rated, "Good"), rated);
+  assert.equal(rate(rated, "Again").ratings[rootQuestionId], "Again");
   assert.equal(reveal(rated), rated);
   assert.equal(
     advance({ ...practice, session: rated }, () => 0).session.phase,

@@ -105,8 +105,7 @@ button svg {
 .skip-link:focus {
   clip-path: none;
 }
-main,
-.app-footer {
+main {
   width: 100%;
   padding-left: max(var(--page-gutter), env(safe-area-inset-left, 0px));
   padding-right: max(var(--page-gutter), env(safe-area-inset-right, 0px));
@@ -304,6 +303,23 @@ textarea::placeholder {
 }
 .primary-button:hover {
   background: #d8d8d8;
+}
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 9px 14px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #1d1d1d;
+  color: #eee;
+  font-size: 14px;
+  text-decoration: none;
+}
+.secondary-button:hover:not(:disabled) {
+  background: var(--raised);
 }
 .question-action {
   margin-top: 28px;
@@ -620,15 +636,6 @@ textarea::placeholder {
 .rating-label {
   color: var(--faint);
   font-size: 12px;
-}
-.app-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  margin-block: 30px 20px;
-  color: var(--faint);
-  font-size: 12px;
-  line-height: 1.6;
 }
 .completion {
   max-width: 680px;
@@ -965,12 +972,6 @@ dialog::backdrop {
     flex-direction: column;
     gap: 14px;
   }
-  .app-footer {
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 42px;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
   .completion {
     padding: 26px 22px;
   }
@@ -1147,7 +1148,7 @@ dialog::backdrop {
   background: #191919;
   color: #fff;
 }
-.workspace-options button {
+.workspace-options :is(button, a) {
   display: block;
   width: 100%;
   min-height: 44px;
@@ -1159,10 +1160,16 @@ dialog::backdrop {
   text-align: left;
   font-size: 14px;
 }
-.workspace-options button:focus-visible {
+.workspace-options a {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+.workspace-options :is(button, a):focus-visible {
   outline-offset: -2px;
 }
-.workspace-options button:hover {
+.workspace-options :is(button, a):hover,
+.workspace-options a[aria-current="page"] {
   background: var(--raised);
 }
 .workspace-options button:disabled {
@@ -1260,6 +1267,335 @@ dialog::backdrop {
   padding-block: 12px;
   cursor: pointer;
   margin-top: 16px;
+}
+.review-settings label {
+  display: block;
+  color: var(--muted);
+  margin: 6px 0;
+  font-size: 14px;
+}
+.review-settings select {
+  width: min(100%, 220px);
+}
+.scenario-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.scenario-timer [role="timer"] {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.library-page {
+  padding-bottom: max(40px, env(safe-area-inset-bottom, 0px));
+}
+.library-heading > p,
+.prep-catalog > p,
+.prep-design > p,
+.prep-steps li p {
+  margin-top: 8px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.library-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 20px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #303030;
+}
+.library-tabs button[aria-pressed="true"] {
+  background: #222;
+  color: #fff;
+}
+.prep-plan {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  gap: clamp(30px, 5vw, 92px);
+  margin-top: 28px;
+}
+.prep-plan h2,
+.prep-catalog h2 {
+  font-size: 22px;
+  font-weight: 500;
+}
+.prep-steps,
+.prep-families,
+.prep-items {
+  padding: 0;
+  margin: 12px 0 0;
+  list-style: none;
+}
+.prep-steps {
+  counter-reset: step;
+}
+.prep-steps li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding-block: 22px;
+  border-top: 1px solid #303030;
+  counter-increment: step;
+}
+.prep-steps li::before {
+  content: counter(step);
+  align-self: start;
+  color: var(--faint);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.prep-steps h3,
+.prep-card strong {
+  font-size: 16px;
+  font-weight: 500;
+}
+.prep-steps li p {
+  font-size: 15px;
+}
+.prep-plan .prep-count,
+.prep-count {
+  color: var(--faint);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.prep-plan :is(button, a).secondary-button,
+.prep-track-actions button {
+  justify-content: center;
+  gap: 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.prep-design {
+  min-width: 0;
+  padding: 22px;
+  background: var(--surface);
+  border-radius: 12px;
+}
+.prep-families button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 4px;
+  border: 0;
+  border-top: 1px solid #303030;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+}
+.prep-families button:hover {
+  background: #1a1a1a;
+}
+.mock-outline {
+  margin-top: 6px;
+  border-top: 1px solid #303030;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.mock-outline summary {
+  min-height: 44px;
+  padding-block: 12px;
+  cursor: pointer;
+}
+.mock-outline ol {
+  margin: 2px 0 0;
+  padding-left: 20px;
+}
+.mock-outline li + li {
+  margin-top: 6px;
+}
+.prep-families strong {
+  font-weight: 500;
+}
+.prep-families small,
+.prep-track small,
+.prep-card small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.prep-catalog {
+  width: min(100%, 960px);
+  margin: 28px auto 0;
+}
+.prep-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block: 20px 10px;
+}
+.prep-filters label:not(.prep-check) {
+  display: grid;
+  flex: 1 1 200px;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.prep-filters input[type="search"] {
+  width: 100%;
+  min-height: 48px;
+  padding: 9px 12px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: var(--surface);
+  color: #fff;
+  font-size: 16px;
+}
+.prep-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.prep-check input {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.prep-catalog .prep-results {
+  color: var(--faint);
+  margin-block: 0 16px;
+}
+.prep-track {
+  border-top: 1px solid #303030;
+}
+.prep-track:last-child {
+  border-bottom: 1px solid #303030;
+}
+.prep-track > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.prep-track > summary::after {
+  content: "+";
+  color: var(--muted);
+}
+.prep-track[open] > summary::after {
+  content: "−";
+}
+.prep-track > summary > span:last-child {
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.prep-track-actions {
+  padding: 4px 4px 12px;
+}
+.prep-items {
+  margin: 0;
+  padding-inline: 14px;
+  background: var(--surface);
+}
+.prep-card,
+.prep-problem {
+  border-top: 1px solid #303030;
+  overflow-wrap: anywhere;
+}
+.prep-card,
+.problem-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+.prep-card {
+  padding-block: 8px;
+}
+.prep-card button:disabled,
+.prep-track-actions button:disabled {
+  opacity: 0.55;
+}
+.problem-heading > a {
+  display: block;
+  min-height: 44px;
+  padding-block: 12px;
+  font-weight: 500;
+  text-decoration-color: #707070;
+}
+.problem-id {
+  margin-right: 4px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+.problem-checkpoint summary {
+  min-height: 44px;
+  padding-block: 11px;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+.problem-checkpoint p {
+  padding-bottom: 14px;
+  color: #ddd;
+  line-height: 1.6;
+}
+.drill-resume,
+.drill-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.drill-resume {
+  margin-top: 14px;
+}
+.drill-bar {
+  justify-content: space-between;
+}
+@media (max-width: 900px) {
+  .prep-plan {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .library-tabs {
+    gap: 2px;
+  }
+  .library-tabs .mode-button {
+    padding-inline: 9px;
+  }
+  .prep-steps li {
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 10px;
+    padding-block: 16px;
+  }
+  .prep-steps li > .secondary-button {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .prep-filters {
+    gap: 9px;
+  }
+  .problem-heading {
+    gap: 8px;
+  }
+  .prep-items {
+    padding-inline: 10px;
+  }
 }
 .recall-layout {
   display: grid;
@@ -1373,7 +1709,7 @@ dialog::backdrop {
   font-size: 15px;
   font-weight: 500;
 }
-input:not([type="file"]),
+input:not([type="file"], [type="checkbox"]),
 select {
   display: block;
   width: 100%;

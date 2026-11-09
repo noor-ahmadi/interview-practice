@@ -29,13 +29,15 @@ function jsonb(study: Study): Study {
   );
 }
 
-async function accountFixture(page: Page) {
-  const server = {
+async function accountFixture(
+  page: Page,
+  server = {
     version: 1,
     study: newStudy(),
     writes: 0,
     loseResponse: false,
-  };
+  },
+) {
   const receipts = new Map<string, number>();
   await page.context().addInitScript(
     ({ user, token }) => {
@@ -107,6 +109,48 @@ async function accountFixture(page: Page) {
   });
   return server;
 }
+
+test("coding progress and a revealed drill resume in a separate account browser", async ({
+  page,
+  browser,
+}) => {
+  const server = await accountFixture(page);
+  await page.goto("/?view=library");
+  await page
+    .getByRole("button", { name: "Coding practice", exact: true })
+    .click();
+  await page
+    .getByRole("checkbox", { name: "Practiced Two Sum", exact: true })
+    .check();
+  await page.getByRole("button", { name: "Recall cards", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Drill these cards", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Reveal answer", exact: true })
+    .click();
+  await expect.poll(() => server.study.drill?.revealed).toBe(true);
+  expect(server.study.codingDone).toEqual([1]);
+  const other = await browser.newPage({
+    viewport: page.viewportSize() ?? undefined,
+  });
+  try {
+    await accountFixture(other, server);
+    await other.goto(new URL("/?view=library", page.url()).href);
+    await expect(
+      other.getByRole("heading", { name: "Check your reasoning" }),
+    ).toBeVisible();
+    await other.getByRole("button", { name: "Back to topics" }).click();
+    await other
+      .getByRole("button", { name: "Coding practice", exact: true })
+      .click();
+    await expect(
+      other.getByRole("checkbox", { name: "Practiced Two Sum", exact: true }),
+    ).toBeChecked();
+  } finally {
+    await other.close();
+  }
+});
 
 test("an existing account loads its own work and sign-out returns to a separate guest workspace", async ({
   page,

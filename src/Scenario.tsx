@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Architecture } from "./Architecture.tsx";
+import { DiagramDialog, ExpandDiagramButton } from "./DiagramDialog.tsx";
 import { HistoryQuestion } from "./HistoryQuestion.tsx";
 import { RatingChoices } from "./RatingChoices.tsx";
 import {
@@ -51,6 +52,53 @@ function Check() {
   );
 }
 
+function ScenarioTimer({
+  deadline,
+  onToggle,
+}: {
+  deadline?: number;
+  onToggle: (deadline?: number) => void;
+}) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!deadline) return;
+    const time = Date.now();
+    setNow(time);
+    if (deadline <= time) return;
+    const interval = window.setInterval(() => {
+      const time = Date.now();
+      setNow(time);
+      if (time >= deadline) window.clearInterval(interval);
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [deadline]);
+  const seconds = deadline
+    ? Math.max(0, Math.ceil((deadline - now) / 1000))
+    : 0;
+  return (
+    <div className="scenario-timer">
+      {deadline !== undefined && (
+        <span role="timer" aria-label="Scenario time remaining">
+          {seconds
+            ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+            : "Time’s up"}
+        </span>
+      )}
+      <button
+        type="button"
+        className="text-button"
+        onClick={() => {
+          const time = Date.now();
+          setNow(time);
+          onToggle(deadline ? undefined : time + 20 * 60 * 1000);
+        }}
+      >
+        {deadline ? "End timer" : "20 min timer"}
+      </button>
+    </div>
+  );
+}
+
 export function Scenario({
   study,
   setPractice,
@@ -67,7 +115,6 @@ export function Scenario({
   saveStatus: string;
 }) {
   const { practice, schedules } = study;
-  const [zoom, setZoom] = useState(1);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [diagramOpen, setDiagramOpen] = useState(false);
   const [pastDiagram, setPastDiagram] = useState<Question | null>(null);
@@ -96,7 +143,6 @@ export function Scenario({
   function openDiagram(past: Question | null, trigger: HTMLButtonElement) {
     diagramTrigger.current = trigger;
     setPastDiagram(past);
-    setZoom(1);
     setDiagramOpen(true);
     diagramDialog.current?.showModal();
   }
@@ -160,6 +206,18 @@ export function Scenario({
             <span className="save-status" role="status">
               {saveFailed ? "Couldn’t save on this device" : saveStatus}
             </span>
+            {session.phase !== "complete" && (
+              <ScenarioTimer
+                key={session.path[0]}
+                deadline={session.deadline}
+                onToggle={(deadline) =>
+                  setPractice((value) => ({
+                    ...value,
+                    session: { ...value.session, deadline },
+                  }))
+                }
+              />
+            )}
             <button
               ref={historyTrigger}
               className="text-button"
@@ -297,23 +355,9 @@ export function Scenario({
                         : "Only the givens and the design you’ve already seen."}
                     </p>
                   </div>
-                  <button
-                    className="icon-button"
-                    aria-label="Expand architecture diagram"
+                  <ExpandDiagramButton
                     onClick={(event) => openDiagram(null, event.currentTarget)}
-                  >
-                    <svg
-                      width="19"
-                      height="19"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      aria-hidden="true"
-                    >
-                      <path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5M4 4l6 6m10-6-6 6M4 20l6-6m10 6-6-6" />
-                    </svg>
-                  </button>
+                  />
                 </div>
                 <Architecture
                   frame={frame}
@@ -486,81 +530,24 @@ export function Scenario({
             ))}
         </div>
       </dialog>
-      <dialog
-        className="diagram-dialog"
-        ref={diagramDialog}
+      <DiagramDialog
+        dialog={diagramDialog}
+        title={
+          pastDiagram
+            ? "Saved reference architecture"
+            : revealed
+              ? "Reference architecture"
+              : "The system so far"
+        }
+        caption={pastDiagram?.title}
+        frame={diagramOpen ? expandedFrame : undefined}
+        before={expandedBefore}
         onClose={() => {
           setDiagramOpen(false);
           setPastDiagram(null);
           diagramTrigger.current?.focus({ preventScroll: true });
         }}
-        aria-labelledby="expanded-heading"
-        onClick={(event) => {
-          if (event.target === event.currentTarget)
-            diagramDialog.current?.close();
-        }}
-      >
-        {diagramOpen && (
-          <div className="dialog-content">
-            <div className="dialog-heading">
-              <h2 id="expanded-heading">
-                {pastDiagram
-                  ? "Saved reference architecture"
-                  : revealed
-                    ? "Reference architecture"
-                    : "The system so far"}
-              </h2>
-              <button
-                autoFocus
-                className="text-button"
-                onClick={() => diagramDialog.current?.close()}
-              >
-                Close
-              </button>
-            </div>
-            {pastDiagram && (
-              <p className="saved-diagram-title">{pastDiagram.title}</p>
-            )}
-            <div className="zoom-controls">
-              <button
-                className="icon-button"
-                aria-label="Zoom out"
-                disabled={zoom <= 0.75}
-                onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))}
-              >
-                −
-              </button>
-              <span>{Math.round(zoom * 100)}%</span>
-              <button
-                className="icon-button"
-                aria-label="Zoom in"
-                disabled={zoom >= 2}
-                onClick={() => setZoom((value) => Math.min(2, value + 0.25))}
-              >
-                +
-              </button>
-              <button className="text-button" onClick={() => setZoom(1)}>
-                Reset
-              </button>
-            </div>
-            <div className="expanded-viewport">
-              <div
-                style={{ width: `${zoom * 100}%`, fontSize: `${zoom * 100}%` }}
-              >
-                <Architecture frame={expandedFrame} before={expandedBefore} />
-              </div>
-            </div>
-            <ul className="component-list">
-              {expandedFrame.components.map((component) => (
-                <li key={component.id}>
-                  <strong>{component.name}</strong>
-                  <span>{component.purpose}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </dialog>
+      />
     </>
   );
 }

@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { recallCards } from "./cards.ts";
+import { recallTracks } from "./recall-tracks.ts";
+import { codingProblemIds, codingTracks } from "./coding-content.ts";
 import { questions, rootQuestionId } from "./content.ts";
 import { reveal } from "./session.ts";
 import { schedule } from "./scheduler.ts";
 import {
   backup,
   beginReview,
+  deletePrivateCard,
   newStudy,
   nextReview,
   queueFor,
@@ -223,11 +226,16 @@ test("the daily limit follows the saved timezone across local clock boundaries",
   );
 });
 
-test("the launch recall library has sixty complete original items with unique IDs", () => {
-  assert.equal(recallCards.length, 60);
-  assert.equal(new Set(recallCards.map((c) => c.id)).size, 60);
+test("the recall library has 72 complete original items with unique IDs and tracks", () => {
+  assert.equal(recallCards.length, 72);
+  assert.equal(new Set(recallCards.map((c) => c.id)).size, 72);
   for (const topic of ["Algorithms", "System design"])
-    assert.equal(recallCards.filter((c) => c.topic === topic).length, 30);
+    assert.equal(recallCards.filter((c) => c.topic === topic).length, 36);
+  const grouped = recallTracks.flatMap((track) => {
+    assert.ok(track.cards.every((card) => card.topic === track.topic));
+    return track.cards.map((card) => card.id);
+  });
+  assert.deepEqual(grouped.sort(), recallCards.map((c) => c.id).sort());
   for (const c of recallCards) {
     assert.ok(
       c.prompt && c.explanation && c.alternatives && c.pitfall && c.difficulty,
@@ -237,13 +245,13 @@ test("the launch recall library has sixty complete original items with unique ID
   }
 });
 
-test("all sixty recall items can enter scheduled review without exceeding daily new-item limits", () => {
+test("the entire recall library can enter scheduled review under the default limit", () => {
   let study = newStudy();
   study.timeZone = "UTC";
-  for (let day = 0; day < 12; day++) {
+  for (let day = 0; day < Math.ceil(recallCards.length / 5); day++) {
     const at = new Date(now.getTime() + day * 86400000);
     const newIds = queueFor(study, at).unseen;
-    assert.equal(newIds.length, 5);
+    assert.equal(newIds.length, Math.min(5, recallCards.length - day * 5));
     for (const id of newIds)
       study = recordRating(study, id, "Easy", at, `launch-${id}`);
     assert.equal(queueFor(study, at).unseen.length, 0);
@@ -252,6 +260,87 @@ test("all sixty recall items can enter scheduled review without exceeding daily 
     Object.keys(study.schedules).sort(),
     recallCards.map((c) => c.id).sort(),
   );
-  assert.equal(study.reviews.length, 60);
+  assert.equal(study.reviews.length, recallCards.length);
   assert.deepEqual(readBackup(backup(study)), study);
+});
+
+test("coding progress, drill position, review settings, and scenario deadline survive backup", () => {
+  const study = newStudy();
+  study.codingDone = [1, 15];
+  study.drill = {
+    ids: recallCards.slice(0, 3).map((card) => card.id),
+    index: 1,
+    revealed: true,
+  };
+  study.newCardsPerDay = 10;
+  study.practice.session.deadline = now.getTime() + 20 * 60 * 1000;
+  study.notes[study.drill.ids[1]!] = "Keep both half-open bounds.";
+  assert.deepEqual(readBackup(backup(study)), study);
+  assert.equal(queueFor(study, now).unseen.length, 10);
+  assert.equal(queueFor({ ...study, newCardsPerDay: 0 }, now).unseen.length, 0);
+  assert.equal(
+    readStudy(JSON.stringify({ ...study, newCardsPerDay: 7 })),
+    null,
+  );
+  assert.equal(
+    readStudy(JSON.stringify({ ...study, codingDone: [1, 1] })),
+    null,
+  );
+  assert.equal(readStudy(JSON.stringify({ ...study, codingDone: [-1] })), null);
+  assert.equal(
+    readStudy(
+      JSON.stringify({ ...study, drill: { ...study.drill, index: 3 } }),
+    ),
+    null,
+  );
+  const problems = codingTracks.flatMap((track) => track.problems);
+  assert.equal(problems.length, 42);
+  assert.equal(codingProblemIds.size, problems.length);
+  assert.equal(
+    new Set(problems.map((problem) => problem.url)).size,
+    problems.length,
+  );
+  assert.ok(
+    problems.every(
+      (problem) =>
+        new URL(problem.url).origin === "https://leetcode.com" &&
+        problem.checkpoint,
+    ),
+  );
+});
+
+test("deleting a private card removes its dependent data and keeps the daily queue valid", () => {
+  const privateId = "private:00000000-0000-4000-8000-000000000001";
+  const id = recallCards[0]!.id;
+  let study = newStudy();
+  study.privateCards = [
+    {
+      id: privateId,
+      title: "Private prompt",
+      prompt: "Why?",
+      explanation: "Because.",
+      topic: "Algorithms",
+      updatedAt: now.toISOString(),
+    },
+  ];
+  study.notes = { [privateId]: "Remove this too", [id]: "Keep this" };
+  study = recordRating(study, privateId, "Hard", now, "private-rating");
+  study.reviewSession = {
+    ids: [privateId, id],
+    index: 0,
+    phase: "rated",
+    ratingId: "private-rating",
+  };
+  const removed = deletePrivateCard(study, privateId);
+  assert.deepEqual(removed.reviewSession, {
+    ids: [id],
+    index: 0,
+    phase: "question",
+  });
+  assert.deepEqual(removed.privateCards, []);
+  assert.deepEqual(removed.notes, { [id]: "Keep this" });
+  assert.deepEqual(removed.reviews, []);
+  assert.deepEqual(removed.schedules, {});
+  assert.deepEqual(readBackup(backup(removed)), removed);
+  assert.equal(deletePrivateCard(study, id), study);
 });

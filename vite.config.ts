@@ -26,5 +26,19 @@ export default defineConfig({
       },
     },
   ],
-  build: { target: "es2022" },
+  build: {
+    target: "es2022",
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: "runtime",
+              test: /\/node_modules\/(?:@supabase\/|react(?:-dom)?\/|scheduler\/)/,
+            },
+          ],
+        },
+      },
+    },
+  },
 });

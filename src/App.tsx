@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import { Scenario } from "./Scenario.tsx";
 import { Review } from "./Review.tsx";
+import { Library } from "./Library.tsx";
 import { PrivateCards } from "./PrivateCards.tsx";
 import { useStudy } from "./useStudy.ts";
 import { backup, rateScenario, readBackup } from "./study.ts";
 import type { Study } from "./study.ts";
 import { supabase } from "./cloud.ts";
+import { switchFamily } from "./session.ts";
 
-type View = "scenario" | "review" | "cards";
+type View = "scenario" | "review" | "library" | "cards";
 
 function currentView(): View {
   const requested = new URLSearchParams(location.search).get("view");
-  return requested === "review" || requested === "cards"
+  return requested === "review" ||
+    requested === "cards" ||
+    requested === "library"
     ? requested
     : "scenario";
 }
@@ -51,12 +56,27 @@ export function App() {
   }, [user?.id]);
 
   function navigate(next: View) {
+    if (next === view) return;
     setView(next);
     history.pushState(null, "", `${location.pathname}?view=${next}`);
     requestAnimationFrame(() => {
       document.querySelector<HTMLElement>("main h1")?.focus();
       window.scrollTo({ top: 0, behavior: "instant" });
     });
+  }
+
+  function followMode(event: MouseEvent<HTMLAnchorElement>, next: View) {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    optionsPanel.current?.hidePopover();
+    navigate(next);
   }
 
   function download(value: Study = study) {
@@ -80,10 +100,14 @@ export function App() {
             ? "#question"
             : view === "review"
               ? "#review-question"
-              : "#private-heading"
+              : view === "library"
+                ? "#library-heading"
+                : "#private-heading"
         }
       >
-        Skip to the question
+        {view === "scenario" || view === "review"
+          ? "Skip to the question"
+          : "Skip to content"}
       </a>
       <div className="workspace-bar">
         <nav aria-label="Study modes">
@@ -91,7 +115,7 @@ export function App() {
             [
               ["scenario", "Scenarios"],
               ["review", "Review"],
-              ["cards", "Private cards"],
+              ["library", "Library"],
             ] as const
           ).map(([id, label]) => (
             <a
@@ -100,18 +124,7 @@ export function App() {
               href={`?view=${id}`}
               aria-label={id === "review" ? "Daily review" : undefined}
               aria-current={view === id ? "page" : undefined}
-              onClick={(event) => {
-                if (
-                  event.button !== 0 ||
-                  event.metaKey ||
-                  event.ctrlKey ||
-                  event.shiftKey ||
-                  event.altKey
-                )
-                  return;
-                event.preventDefault();
-                navigate(id);
-              }}
+              onClick={(event) => followMode(event, id)}
             >
               {label}
             </a>
@@ -153,6 +166,13 @@ export function App() {
           >
             {user ? "Account" : "Sign in"}
           </button>
+          <a
+            href="?view=cards"
+            aria-current={view === "cards" ? "page" : undefined}
+            onClick={(event) => followMode(event, "cards")}
+          >
+            Private cards
+          </a>
           <button
             type="button"
             disabled={!ready}
@@ -243,6 +263,23 @@ export function App() {
               study={study}
               setStudy={setStudy}
               saveStatus={saveFailed ? "Couldn’t save on this device" : status}
+            />
+          ) : view === "library" ? (
+            <Library
+              key={user?.id ?? "guest"}
+              study={study}
+              setStudy={setStudy}
+              onReview={(event) => followMode(event, "review")}
+              onScenario={(family) => {
+                setStudy((value) => ({
+                  ...value,
+                  practice: switchFamily(value.practice, family, {
+                    schedules: value.schedules,
+                    lastGrades,
+                  }),
+                }));
+                navigate("scenario");
+              }}
             />
           ) : (
             <PrivateCards
@@ -386,7 +423,8 @@ export function App() {
           </div>
           <p>
             Export your notes, private cards, review history, schedules, and
-            session position as versioned JSON. Keep the file private.
+            session position, settings, and coding progress as versioned JSON.
+            Keep the file private.
           </p>
           <button className="primary-button" onClick={() => download()}>
             Download backup
@@ -425,6 +463,7 @@ export function App() {
                 <p>
                   {restore.privateCards.length} private cards ·{" "}
                   {restore.reviews.length} reviews ·{" "}
+                  {restore.codingDone?.length ?? 0} coding problems practiced ·{" "}
                   {restore.practice.history.length} completed scenarios ·{" "}
                   {restore.practice.paused.length +
                     (restore.practice.session.phase === "complete"

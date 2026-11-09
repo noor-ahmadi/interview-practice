@@ -14,7 +14,7 @@ test("a complete daily review resumes, hides answers, and respects the new-item 
   await expect(page.locator(".review-stats")).toContainText("New today5");
   const options = page.getByRole("button", { name: "More options" });
   const navTargets = await page
-    .locator(".workspace-bar :is(a, .options-trigger)")
+    .locator(".workspace-bar :is(nav a, .options-trigger)")
     .evaluateAll((targets) =>
       targets.map((target) => {
         const { top, width, height } = target.getBoundingClientRect();
@@ -179,6 +179,17 @@ test("private drafts survive reload, editing keeps IDs, and backups restore the 
   await expect(page.locator(".private-library")).toContainText(
     "Explain the boundary",
   );
+  await page.getByRole("button", { name: "Edit Explain the boundary" }).click();
+  await page.getByRole("button", { name: "Delete card", exact: true }).click();
+  const removal = page.getByRole("dialog", { name: "Delete private card?" });
+  await removal.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.locator(".private-library li")).toHaveCount(1);
+  await page.getByRole("button", { name: "Delete card", exact: true }).click();
+  await removal
+    .getByRole("button", { name: "Delete card", exact: true })
+    .click();
+  await expect(page.locator(".private-library li")).toHaveCount(0);
+  await expect(page.getByLabel("Title", { exact: true })).toBeFocused();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -209,6 +220,15 @@ test("rated scenarios enter daily review without scheduling or exposing their ch
     }),
   ).toBeVisible();
   await expect(page.locator("[data-component]")).toHaveCount(2);
+  const expand = page.getByRole("button", {
+    name: "Expand architecture diagram",
+  });
+  await expand.click();
+  const diagram = page.getByRole("dialog", { name: "The system so far" });
+  await expect(diagram.locator("[data-component]")).toHaveCount(2);
+  await expect(diagram).not.toContainText("Amazon EC2");
+  await page.keyboard.press("Escape");
+  await expect(expand).toBeFocused();
   await expect(page.locator("body")).not.toContainText(
     "The lunch rush arrives.",
   );

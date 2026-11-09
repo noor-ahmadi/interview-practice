@@ -1,4 +1,5 @@
 import { additionalCards } from "./recall-library.ts";
+import { advancedCards } from "./advanced-cards.ts";
 
 export type RecallCard = {
   id: string;
@@ -246,6 +247,7 @@ export const recallCards: RecallCard[] = [
     sources: [algorithms],
   },
   ...additionalCards,
+  ...advancedCards,
 ];
 
 export type PrivateCard = {

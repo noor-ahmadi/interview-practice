@@ -24,6 +24,7 @@ export type Session = {
   notes: Record<string, string>;
   ratings: Record<string, Grade>;
   ratingId?: string;
+  deadline?: number;
 };
 export type SavedPractice = {
   version: 4;
@@ -172,7 +173,8 @@ export function advance(
   const { ratingId: _ratingId, ...finished } = session;
   const children = currentQuestion(session).children;
   if (!children.length) {
-    const completed: Session = { ...finished, phase: "complete" };
+    const { deadline: _deadline, ...record } = finished;
+    const completed: Session = { ...record, phase: "complete" };
     return {
       ...practice,
       session: completed,
@@ -260,6 +262,13 @@ function parseSession(value: unknown, legacy: boolean): Session | null {
   )
     return null;
   if (
+    s.deadline !== undefined &&
+    (!Number.isSafeInteger(s.deadline) ||
+      s.deadline <= 0 ||
+      s.phase === "complete")
+  )
+    return null;
+  if (
     ["rated", "complete"].includes(s.phase) &&
     !grades.includes(s.ratings[last.id]!)
   )
@@ -274,6 +283,7 @@ function parseSession(value: unknown, legacy: boolean): Session | null {
     notes: s.notes,
     ratings: s.ratings,
     ...(s.ratingId === undefined ? {} : { ratingId: s.ratingId }),
+    ...(s.deadline === undefined ? {} : { deadline: s.deadline }),
   };
 }
 

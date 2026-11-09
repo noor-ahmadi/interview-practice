@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Study } from "./study.ts";
+import { deletePrivateCard } from "./study.ts";
 import type { PrivateCard } from "./cards.ts";
 
 type Form = {
@@ -46,6 +47,9 @@ export function PrivateCards({
     return empty;
   });
   const [message, setMessage] = useState("");
+  const removeDialog = useRef<HTMLDialogElement>(null);
+  const removeTrigger = useRef<HTMLButtonElement>(null);
+  const editing = study.privateCards.find((card) => card.id === form.id);
   useEffect(() => {
     try {
       localStorage.setItem(key, JSON.stringify(form));
@@ -87,6 +91,12 @@ export function PrivateCards({
             className="card-editor"
             onSubmit={(e) => {
               e.preventDefault();
+              if (form.id && !editing) {
+                setMessage(
+                  "This card was removed. Start a new card to save another copy.",
+                );
+                return;
+              }
               if (!form.id && study.privateCards.length >= 2000) {
                 setMessage(
                   "This workspace has reached its 2,000-card limit. Edit an existing card instead.",
@@ -183,6 +193,16 @@ export function PrivateCards({
                   New card
                 </button>
               )}
+              {editing && (
+                <button
+                  ref={removeTrigger}
+                  type="button"
+                  className="text-button"
+                  onClick={() => removeDialog.current?.showModal()}
+                >
+                  Delete card
+                </button>
+              )}
             </div>
             <p className="form-message" role="status">
               {message}
@@ -226,10 +246,48 @@ export function PrivateCards({
           </section>
         </div>
       </main>
-      <footer className="app-footer">
-        <p>Small questions. Clear reasoning.</p>
-        <span>Unfinished drafts stay on this device</span>
-      </footer>
+      <dialog
+        ref={removeDialog}
+        aria-labelledby="remove-card-heading"
+        onClose={() =>
+          requestAnimationFrame(() =>
+            (
+              removeTrigger.current ?? document.getElementById("card-title")
+            )?.focus(),
+          )
+        }
+      >
+        <div className="dialog-content">
+          <h2 id="remove-card-heading">Delete private card?</h2>
+          <p>{editing?.title}</p>
+          <p>
+            This removes the card and its notes, ratings, and schedule from your
+            workspace.
+          </p>
+          <div className="form-actions">
+            <button
+              className="secondary-button"
+              autoFocus
+              onClick={() => removeDialog.current?.close()}
+            >
+              Cancel
+            </button>
+            <button
+              className="primary-button"
+              disabled={!editing}
+              onClick={() => {
+                if (!editing) return;
+                setStudy((value) => deletePrivateCard(value, editing.id));
+                setForm(empty);
+                setMessage("Card deleted.");
+                removeDialog.current?.close();
+              }}
+            >
+              Delete card
+            </button>
+          </div>
+        </div>
+      </dialog>
     </>
   );
 }

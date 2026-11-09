@@ -1,11 +1,14 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Architecture } from "./Architecture.tsx";
+import { DiagramDialog, ExpandDiagramButton } from "./DiagramDialog.tsx";
 import { RatingChoices } from "./RatingChoices.tsx";
+import { RecallFeedback } from "./RecallFeedback.tsx";
 import { scenarioQuestions as questions } from "./scenario-content.ts";
 import { recallCards } from "./cards.ts";
 import {
   beginReview,
+  dailyNewLimits,
   findItem,
   nextReview,
   openRating,
@@ -27,11 +30,19 @@ export function Review({
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const answerHeading = useRef<HTMLHeadingElement>(null);
+  const diagramDialog = useRef<HTMLDialogElement>(null);
+  const diagramTrigger = useRef<HTMLButtonElement>(null);
+  const [diagramOpen, setDiagramOpen] = useState(false);
   const session = study.reviewSession;
   const active = session && session.phase !== "complete" ? session : null;
   const item = active ? findItem(study, active.ids[active.index]!) : null;
   const scenario = item ? questions[item.id] : undefined;
   const revealed = active && active.phase !== "question";
+  const frame =
+    scenario && (revealed ? scenario.answerFrame : scenario.questionFrame);
+  const diagramTitle = revealed
+    ? "Reference architecture"
+    : "The system so far";
   const selected =
     item && active?.phase === "rated"
       ? openRating(study, item.id, active.ratingId)
@@ -162,22 +173,27 @@ export function Review({
               </div>
             )}
           </section>
-          {scenario && (
+          {scenario && frame && (
             <aside className="diagram-pane">
               <div className="diagram-header">
                 <div>
-                  <h2>
-                    {revealed ? "Reference architecture" : "The system so far"}
-                  </h2>
+                  <h2>{diagramTitle}</h2>
                   <p>
                     {revealed
                       ? "One reasonable design."
                       : "The established baseline for this question."}
                   </p>
                 </div>
+                <ExpandDiagramButton
+                  onClick={(event) => {
+                    diagramTrigger.current = event.currentTarget;
+                    setDiagramOpen(true);
+                    diagramDialog.current?.showModal();
+                  }}
+                />
               </div>
               <Architecture
-                frame={revealed ? scenario.answerFrame : scenario.questionFrame}
+                frame={frame}
                 before={scenario.questionFrame}
                 focus={
                   scenario.focus
@@ -190,6 +206,16 @@ export function Review({
                     : undefined
                 }
               />
+              <DiagramDialog
+                dialog={diagramDialog}
+                title={diagramTitle}
+                frame={diagramOpen ? frame : undefined}
+                before={scenario.questionFrame}
+                onClose={() => {
+                  setDiagramOpen(false);
+                  diagramTrigger.current?.focus({ preventScroll: true });
+                }}
+              />
             </aside>
           )}
           {revealed && (
@@ -200,36 +226,7 @@ export function Review({
               <h2 id="recall-answer-heading" ref={answerHeading} tabIndex={-1}>
                 Check your reasoning
               </h2>
-              <p>{item.explanation}</p>
-              {"rubric" in item && (
-                <>
-                  <h3>Did you cover these?</h3>
-                  <ul className="recall-rubric">
-                    {item.rubric.map((p) => (
-                      <li key={p}>{p}</li>
-                    ))}
-                  </ul>
-                  <details className="answer-details">
-                    <summary>Alternatives, pitfalls, and sources</summary>
-                    <h3>Other valid approaches</h3>
-                    <p>{item.alternatives}</p>
-                    <h3>Watch for</h3>
-                    <p>{item.pitfall}</p>
-                    <div className="sources">
-                      {item.sources.map((s) => (
-                        <a
-                          key={s.url}
-                          href={s.url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {s.label} <span aria-hidden="true">↗</span>
-                        </a>
-                      ))}
-                    </div>
-                  </details>
-                </>
-              )}
+              <RecallFeedback item={item} />
               <RatingChoices
                 options={ratingOptions(study, item.id, selected)}
                 selected={selected?.grade}
@@ -289,8 +286,8 @@ export function Review({
                 </button>
               )}
               <p className="small-note">
-                Five new items per day · 90% recall target · no streak to
-                protect
+                {study.newCardsPerDay ?? 5} new items per day · 90% recall
+                target
               </p>
             </section>
             <aside className="review-method">
@@ -301,10 +298,29 @@ export function Review({
                 your rating.
               </p>
               <p>
-                The library starts with {recallCards.length} original cards,
-                split between system design and algorithm reasoning. Questions
-                you rate in a scenario join the same queue independently.
+                The library has {recallCards.length} original cards, split
+                between system design and algorithm reasoning. Questions you
+                rate in a scenario join the same queue independently.
               </p>
+              <details className="review-settings">
+                <summary>Review settings</summary>
+                <label htmlFor="daily-new-limit">New cards per day</label>
+                <select
+                  id="daily-new-limit"
+                  name="daily-new-limit"
+                  value={study.newCardsPerDay ?? 5}
+                  onChange={(event) => {
+                    const newCardsPerDay = Number(event.target.value);
+                    setStudy((value) => ({ ...value, newCardsPerDay }));
+                  }}
+                >
+                  {dailyNewLimits.map((limit) => (
+                    <option key={limit} value={limit}>
+                      {limit === 0 ? "0 (due reviews only)" : limit}
+                    </option>
+                  ))}
+                </select>
+              </details>
               <details>
                 <summary>Why this method?</summary>
                 <p>

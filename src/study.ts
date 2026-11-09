@@ -1,5 +1,6 @@
 import { recallCards } from "./cards.ts";
 import type { PrivateCard } from "./cards.ts";
+import { codingProblemIds } from "./coding-content.ts";
 import { grades } from "./content.ts";
 import {
   supportedRevisions,
@@ -29,6 +30,7 @@ export type ReviewSession = {
   phase: "question" | "feedback" | "rated" | "complete";
   ratingId?: string;
 };
+export const dailyNewLimits = [0, 5, 10, 15];
 export type Study = {
   schemaVersion: 1;
   contentRevision: string;
@@ -37,6 +39,9 @@ export type Study = {
   schedules: Record<string, ScheduledCard>;
   reviews: ReviewEvent[];
   reviewSession: ReviewSession | null;
+  drill?: { ids: string[]; index: number; revealed: boolean };
+  codingDone?: number[];
+  newCardsPerDay?: number;
   notes: Record<string, string>;
   timeZone: string;
 };
@@ -91,7 +96,7 @@ export function queueFor(study: Study, now = new Date()) {
   ).size;
   const unseen = [...recallCards, ...study.privateCards]
     .filter((c) => !study.schedules[c.id])
-    .slice(0, Math.max(0, 5 - introduced))
+    .slice(0, Math.max(0, (study.newCardsPerDay ?? 5) - introduced))
     .map((c) => c.id);
   return { due, unseen, ids: [...due, ...unseen], introduced };
 }
@@ -103,6 +108,40 @@ export function beginReview(study: Study, now = new Date()): Study {
   return {
     ...study,
     reviewSession: ids.length ? { ids, index: 0, phase: "question" } : null,
+  };
+}
+
+export function deletePrivateCard(study: Study, id: string): Study {
+  if (!study.privateCards.some((card) => card.id === id)) return study;
+  const { [id]: _schedule, ...schedules } = study.schedules;
+  const { [id]: _note, ...notes } = study.notes;
+  let reviewSession = study.reviewSession;
+  const removed = reviewSession?.ids.indexOf(id) ?? -1;
+  if (reviewSession && removed >= 0) {
+    const { index } = reviewSession;
+    const ids = reviewSession.ids.filter((item) => item !== id);
+    if (!ids.length) reviewSession = null;
+    else if (removed === index) {
+      reviewSession = {
+        ids,
+        index: Math.min(index, ids.length - 1),
+        phase: index === ids.length ? "complete" : "question",
+      };
+    } else {
+      reviewSession = {
+        ...reviewSession,
+        ids,
+        index: index - Number(removed < index),
+      };
+    }
+  }
+  return {
+    ...study,
+    privateCards: study.privateCards.filter((card) => card.id !== id),
+    schedules,
+    notes,
+    reviewSession,
+    reviews: study.reviews.filter((event) => event.itemId !== id),
   };
 }
 
@@ -266,6 +305,25 @@ export function readStudy(raw: string): Study | null {
       return null;
     const practice = readPractice(JSON.stringify(s.practice));
     if (!practice) return null;
+    const drill = s.drill;
+    if (
+      (s.newCardsPerDay !== undefined &&
+        !dailyNewLimits.includes(s.newCardsPerDay)) ||
+      (s.codingDone !== undefined &&
+        (!Array.isArray(s.codingDone) ||
+          s.codingDone.some((id) => !codingProblemIds.has(id)) ||
+          new Set(s.codingDone).size !== s.codingDone.length)) ||
+      (drill !== undefined &&
+        (!drill ||
+          !Array.isArray(drill.ids) ||
+          new Set(drill.ids).size !== drill.ids.length ||
+          drill.ids.some((id) => !recallCards.some((card) => card.id === id)) ||
+          !Number.isInteger(drill.index) ||
+          drill.index < 0 ||
+          drill.index >= drill.ids.length ||
+          typeof drill.revealed !== "boolean"))
+    )
+      return null;
     // Validate every restored field before it can enter the rendered UI or scheduler.
     if (
       !Array.isArray(s.privateCards) ||

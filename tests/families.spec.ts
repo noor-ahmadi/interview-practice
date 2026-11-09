@@ -37,6 +37,20 @@ for (const [family, paths] of [
       ],
     ],
   ],
+  [
+    "feed",
+    [
+      ["feed-following-start", "feed-reader-burst", "feed-cache-visibility"],
+      ["feed-community-start", "feed-ranking-cursor", "feed-ranking-edits"],
+    ],
+  ],
+  [
+    "files",
+    [
+      ["files-team-start", "files-resumable-upload", "files-publish-retry"],
+      ["files-devices-start", "files-offline-cursor", "files-replay-delete"],
+    ],
+  ],
 ] as const) {
   test(`${family} sessions complete both starts with hidden branches and mobile controls`, async ({
     page,

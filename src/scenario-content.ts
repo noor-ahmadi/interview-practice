@@ -5,21 +5,30 @@ import {
   shortenerQuestions,
   shortenerVariants,
 } from "./shortener-scenarios.ts";
+import { feedQuestions, feedVariants } from "./feed-scenarios.ts";
+import { fileQuestions, fileVariants } from "./file-scenarios.ts";
 
 export const legacyRevision = "2026-11-05.1";
 export const foodRevision = "2026-11-05.2";
-export const scenarioRevision = "2026-11-05.3";
+export const launchRevision = "2026-11-05.3";
+export const scenarioRevision = "2026-11-08.1";
 export type ScenarioRevision =
-  typeof legacyRevision | typeof foodRevision | typeof scenarioRevision;
+  | typeof legacyRevision
+  | typeof foodRevision
+  | typeof launchRevision
+  | typeof scenarioRevision;
 export const supportedRevisions: string[] = [
   legacyRevision,
   foodRevision,
+  launchRevision,
   scenarioRevision,
 ];
 export const scenarioFamilies = [
   { id: "delivery", name: "Food delivery" },
   { id: "chat", name: "Chat" },
   { id: "shortener", name: "URL shortener" },
+  { id: "feed", name: "News feed" },
+  { id: "files", name: "File sync" },
 ] as const;
 export type Family = (typeof scenarioFamilies)[number]["id"];
 
@@ -42,6 +51,8 @@ export const scenarioVariants = [
   },
   ...chatVariants,
   ...shortenerVariants,
+  ...feedVariants,
+  ...fileVariants,
 ] as const;
 
 const pg = {
@@ -929,16 +940,27 @@ const foodQuestions: Record<string, Question> = {
   },
 };
 
-export const scenarioQuestions: Record<string, Question> = {
+const launchQuestions: Record<string, Question> = {
   ...foodQuestions,
   ...chatQuestions,
   ...shortenerQuestions,
 };
 
+export const scenarioQuestions: Record<string, Question> = {
+  ...launchQuestions,
+  ...feedQuestions,
+  ...fileQuestions,
+};
+
 export function questionsForRevision(revision: ScenarioRevision) {
-  return revision === legacyRevision
-    ? legacyQuestions
-    : revision === foodRevision
-      ? foodQuestions
-      : scenarioQuestions;
+  switch (revision) {
+    case legacyRevision:
+      return legacyQuestions;
+    case foodRevision:
+      return foodQuestions;
+    case launchRevision:
+      return launchQuestions;
+    case scenarioRevision:
+      return scenarioQuestions;
+  }
 }

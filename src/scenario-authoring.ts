@@ -1,4 +1,9 @@
-import type { Component, Connection, DiagramFrame } from "./content.ts";
+import type {
+  Component,
+  Connection,
+  DiagramFrame,
+  Question,
+} from "./content.ts";
 
 // Authored coordinates are shared by the new families; changes never reserve future nodes.
 export const application: DiagramFrame = {
@@ -102,6 +107,46 @@ export function actors(frame: DiagramFrame): DiagramFrame {
     components: frame.components.filter((c) => c.kind === "person"),
     connections: [],
   };
+}
+
+type AuthoredQuestion = Omit<
+  Question,
+  "id" | "questionFrame" | "children" | "focus"
+> & {
+  parent?: string;
+  view: { label: string; ids: string[] };
+};
+
+// A follow-up inherits the exact design that its parent just revealed.
+export function branchQuestions(
+  start: DiagramFrame,
+  entries: Record<string, AuthoredQuestion>,
+): Record<string, Question> {
+  return Object.fromEntries(
+    Object.entries(entries).map(([id, { parent, view, ...question }]) => {
+      const questionFrame = parent ? entries[parent]!.answerFrame : start;
+      const inFrame = (frame: DiagramFrame) =>
+        view.ids.filter((id) =>
+          frame.components.some((component) => component.id === id),
+        );
+      return [
+        id,
+        {
+          ...question,
+          id,
+          questionFrame,
+          children: Object.keys(entries).filter(
+            (child) => entries[child]!.parent === id,
+          ),
+          focus: {
+            label: view.label,
+            question: inFrame(questionFrame),
+            answer: inFrame(question.answerFrame),
+          },
+        },
+      ];
+    }),
+  );
 }
 
 export const sources = {

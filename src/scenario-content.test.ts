@@ -7,6 +7,7 @@ import {
   scenarioVariants,
   scenarioFamilies,
   foodRevision,
+  launchRevision,
   questionsForRevision,
 } from "./scenario-content.ts";
 import {
@@ -34,8 +35,9 @@ function finish(practice: SavedPractice, random = () => 0): SavedPractice {
   return practice;
 }
 
-test("all six authored variants have nine coherent, fully reachable questions", () => {
-  assert.equal(scenarioVariants.length, 6);
+test("all ten authored variants have nine coherent, fully reachable questions", () => {
+  assert.equal(scenarioVariants.length, 10);
+  assert.equal(Object.keys(questionsForRevision(launchRevision)).length, 54);
   for (const family of scenarioFamilies)
     assert.equal(
       scenarioVariants.filter((v) => v.family === family.id).length,
@@ -111,7 +113,7 @@ test("all six authored variants have nine coherent, fully reachable questions", 
     visit(variant.root);
     assert.equal(visited.size - before, 9);
   }
-  assert.equal(visited.size, 54);
+  assert.equal(visited.size, 90);
   assert.equal(visited.size, Object.keys(questions).length);
 });
 

@@ -2,10 +2,10 @@ import type { Grade } from "./content.ts";
 import { intervalLabel } from "./scheduler.ts";
 
 const meanings: Record<Grade, string> = {
-  Again: "Missed the answer",
-  Hard: "Recalled with effort",
-  Good: "Recalled correctly",
-  Easy: "Recalled immediately",
+  Again: "Missed a core point or needed the answer",
+  Hard: "Correct without hints, but difficult",
+  Good: "Correct without hints, with reasonable effort",
+  Easy: "Correct without hints, with little effort",
 };
 
 export function RatingChoices({
@@ -21,6 +21,10 @@ export function RatingChoices({
   return (
     <fieldset className="rating">
       <legend>How did it go?</legend>
+      <p className="small-note">
+        Again: missed a core idea or needed a hint. Hard: correct but difficult.
+        Rate your recall, not how familiar the revealed answer feels.
+      </p>
       <div className="grade-buttons">
         {options.map(({ grade, dueAt }) => {
           const due = Date.parse(dueAt) <= now.getTime();

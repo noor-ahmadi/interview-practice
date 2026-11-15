@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Architecture } from "./Architecture.tsx";
 import { DiagramDialog, ExpandDiagramButton } from "./DiagramDialog.tsx";
@@ -48,8 +48,15 @@ export function Review({
       ? openRating(study, item.id, active.ratingId)
       : undefined;
   const overview = !active || !item;
-  const queue = overview ? queueFor(study) : null;
-  const today = studyDay(new Date(), study.timeZone);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    if (!overview) return;
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 15000);
+    return () => window.clearInterval(timer);
+  }, [overview]);
+  const queue = overview ? queueFor(study, now) : null;
+  const today = studyDay(now, study.timeZone);
   const done = study.reviews.filter((r) => r.day === today).length;
   const nextDue = overview
     ? Object.values(study.schedules)
@@ -170,6 +177,7 @@ export function Review({
                 >
                   Reveal answer <span aria-hidden="true">→</span>
                 </button>
+                <p>Answer out loud or in notes before revealing.</p>
               </div>
             )}
           </section>
@@ -293,9 +301,10 @@ export function Review({
             <aside className="review-method">
               <h3>Recall before you reveal.</h3>
               <p>
-                Try the explanation yourself, compare it with the reference,
-                then rate how well you remembered. The next interval follows
-                your rating.
+                Explain the mechanism and why it works before revealing.
+                Compare your answer with the rubric, then rate that attempt.
+                If you missed the central idea, choose Again and explain the
+                correction in your own words.
               </p>
               <p>
                 The library has {recallCards.length} original cards, split
@@ -327,7 +336,8 @@ export function Review({
                   Retrieval practice and spaced study improve long-term
                   retention. FSRS estimates useful review intervals; a 90%
                   target is a scheduling setting, not a guarantee of your
-                  performance.
+                  performance. These studies support retrieval and spacing;
+                  they do not validate this deck or predict interview results.
                 </p>
                 <div className="sources">
                   <a

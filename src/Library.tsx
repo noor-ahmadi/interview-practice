@@ -102,6 +102,7 @@ function Drill({
               >
                 Reveal answer <span aria-hidden="true">→</span>
               </button>
+              <p>Answer out loud or in notes before revealing.</p>
             </div>
           )}
         </section>
@@ -405,7 +406,12 @@ export function Library({
               ))}
             </ul>
             <details className="mock-outline">
-              <summary>20-minute mock outline</summary>
+              <summary>20-minute guided practice</summary>
+              <p>
+                These branches train individual decisions. They supply a
+                baseline and feedback between questions, so they are not a
+                complete interview simulation.
+              </p>
               <ol>
                 <li>
                   Spend 3 minutes clarifying requirements and the main workload.
@@ -422,6 +428,67 @@ export function Library({
                   the rubric.
                 </li>
               </ol>
+            </details>
+            <details className="mock-outline">
+              <summary>Practice a complete design without hints</summary>
+              <p>
+                Start on blank paper with a prompt such as “Design an order
+                and delivery tracking service.” Keep the cards and diagrams
+                closed until you finish. Use the following 40-minute outline
+                as a practice plan, not an employer scoring rubric.
+              </p>
+              <ol>
+                <li>
+                  <strong>Scope, 5 minutes.</strong> Identify users and the two
+                  or three essential actions. Ask about scale, latency,
+                  freshness, durability, and what is out of scope. State your
+                  assumptions when no interviewer is available.
+                </li>
+                <li>
+                  <strong>Estimate, 5 minutes.</strong> Calculate average and
+                  peak requests per second, bytes per write, and retained data.
+                  For example, 1 million daily users × 10 reads / 86,400 is
+                  about 116 reads/s on average; a stated 10× peak assumption
+                  gives about 1,160 reads/s. These are workload estimates, not
+                  server counts or benchmark results.
+                </li>
+                <li>
+                  <strong>Design, 10 minutes.</strong> Define example API
+                  requests and responses, entity keys, and indexes for the
+                  actual queries. Trace a write and a read through the simplest
+                  architecture. Say when a write is acknowledged and which
+                  component owns the durable truth.
+                </li>
+                <li>
+                  <strong>Challenge it, 15 minutes.</strong> Change one
+                  assumption: 10× peak load, a hot customer, a timeout after a
+                  commit, or a failed region. Trace a concrete failure and
+                  recovery. Explain the correctness boundary, bottleneck,
+                  operational cost, and a credible alternative to your choice.
+                </li>
+                <li>
+                  <strong>Review, 5 minutes.</strong> Summarize the trade-offs,
+                  permission checks, recovery limits, and metrics you would
+                  watch. Then open the relevant cards to find missing reasoning.
+                  Repeat later with a different workload and constraints.
+                </li>
+              </ol>
+              <p>
+                A useful self-check: can you walk through one request, explain
+                what happens when each dependency fails, and defend why the
+                design meets the requirements? A memorized diagram is not
+                enough. Ask a practice partner to challenge your assumptions
+                when possible.
+              </p>
+              <div className="sources">
+                <a
+                  href="https://careers.microsoft.com/v2/global/en/hiring-tips/technical-interviewing.html"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Microsoft: technical interview expectations
+                </a>
+              </div>
             </details>
           </section>
         </div>

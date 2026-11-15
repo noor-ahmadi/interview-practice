@@ -200,19 +200,18 @@ test("private drafts survive reload, editing keeps IDs, and backups restore the 
 test("rated scenarios enter daily review without scheduling or exposing their children", async ({
   page,
 }) => {
+  await page.clock.install({ time: new Date("2026-11-10T16:00:00Z") });
   await page.goto("/");
   await page.getByRole("button", { name: "Reveal answer" }).click();
   await page.getByRole("button", { name: "Again", exact: true }).click();
   await page.getByRole("link", { name: "Daily review", exact: true }).click();
-  await page.evaluate(() => {
-    const key = "interview-practice:study:v1:guest";
-    const draft = JSON.parse(localStorage.getItem(key)!);
-    draft.study.schedules["delivery-small-start"].dueAt = new Date(
-      Date.now() - 60000,
-    ).toISOString();
-    localStorage.setItem(key, JSON.stringify(draft));
-  });
-  await page.reload();
+  await page.getByText("Review settings", { exact: true }).click();
+  await page.getByLabel("New cards per day").selectOption("0");
+  await expect(page.getByRole("button", { name: "Start review" })).toHaveCount(0);
+  // Again schedules a real learning step. It must become available while the
+  // overview stays open, without reloading or editing the stored due date.
+  await page.clock.fastForward(75000);
+  await expect(page.locator(".review-stats")).toContainText("Due now1");
   await page.getByRole("button", { name: "Start review" }).click();
   await expect(
     page.getByRole("heading", {

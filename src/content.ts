@@ -86,19 +86,19 @@ export const questions: Record<string, Question> = {
     id: rootQuestionId,
     title: "Start with ten customers.",
     prompt:
-      "You’re building a DoorDash-style service for one restaurant. Customers place orders, the restaurant accepts them, and customers check their order status. What is the smallest architecture you would trust to run it?",
+      "You’re building a DoorDash-style service for one restaurant. Customers place orders, the restaurant accepts them, and customers check their order status. Propose the smallest trustworthy architecture, including a create/read API and the records needed to preserve an accepted order.",
     givens: [
       "10 customers, around 20 orders a day",
       "One restaurant in one city",
       "Payments and courier dispatch are outside this first version",
     ],
     rubric: [
-      "Keep the application simple: one deployable service can handle this workload.",
+      "Start with one deployable service and validate its capacity against the actual workload.",
       "Persist orders and their allowed state transitions in a durable database.",
-      "Define a basic request flow and measure errors, latency, and database performance.",
+      "Describe create/read endpoints, order ownership and line items, and the commit-before-response boundary; identify an availability limitation.",
     ],
     explanation:
-      "One application on Amazon EC2 and a small RDS PostgreSQL database are a reasonable starting point. The server validates the order and price, commits it, and returns an order ID. A restaurant dashboard can poll for new orders; customers can poll for status. Keep state in the database so a process restart does not lose an accepted order. The workload gives us no reason to split the application into microservices.",
+      "One application on EC2 and RDS PostgreSQL are a reasonable starting point. For example, POST /orders accepts item IDs and quantities; GET /orders/{id} checks customer ownership. Store orders with customer, restaurant, status, and accepted line-item prices. The server validates price and allowed state changes, commits the order, then returns its ID. Restaurant and customer screens can poll. Twenty orders per day is a tiny average, but says little about bursts or read traffic. One API instance is a failure point: choose backups, recovery and availability against the requirements. There is no measured reason here for microservices.",
     alternatives:
       "A managed application platform or a small serverless API with a suitable database can work too. Judge the operational effort, durability, and expected workload, rather than whether the product names match this reference.",
     pitfall:
@@ -111,6 +111,14 @@ export const questions: Record<string, Question> = {
       {
         label: "RDS for PostgreSQL",
         url: "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_PostgreSQL.html",
+      },
+      {
+        label: "PostgreSQL transaction boundaries",
+        url: "https://www.postgresql.org/docs/current/tutorial-transactions.html",
+      },
+      {
+        label: "OWASP authorization on every request",
+        url: "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html",
       },
     ],
     questionFrame: { components: [customer, restaurant], connections: [] },
@@ -125,19 +133,19 @@ export const questions: Record<string, Question> = {
     id: "delivery-lunch-rush",
     title: "The lunch rush arrives.",
     prompt:
-      "Continue from the reference design. A promotion brings 1,000 orders a minute. API CPU is saturated, while database measurements show spare capacity. How would you scale the application, and what state must stop living inside a single instance?",
+      "Continue from the reference design. A promotion brings 1,000 orders a minute. API CPU is saturated, while database measurements show spare capacity. Convert that rate to orders per second, then explain how you would scale the application and remove instance-local state dependencies.",
     givens: [
       "API CPU is the measured bottleneck in this exercise",
       "The database still has capacity",
       "An order is acknowledged only after it is committed",
     ],
     rubric: [
-      "Put multiple stateless application instances behind a load balancer.",
+      "Convert 1,000/minute to about 16.7/second, distinguish order rate from total request rate, and scale the measured API bottleneck.",
       "Keep durable order state in PostgreSQL and move any instance-local sessions to shared storage or signed tokens.",
       "Use health checks, bounded database connection pools, and load measurements before increasing capacity further.",
     ],
     explanation:
-      "An Application Load Balancer can route requests across an EC2 Auto Scaling group. Each instance must be able to serve the next request without depending on a previous request reaching that same machine. Keep orders in RDS and size the total connection budget across instances. Scale against observed load and latency, then measure again: adding application servers can move the bottleneck to the database.",
+      "1,000 orders/minute is about 16.7 order writes/second, not the total request rate: menu reads, status polling and work per order also matter. The exercise supplies measured CPU saturation; that rate alone does not prove a server needs scaling. An ALB can route across stateless EC2 instances. Keep orders in RDS and share sessions or use appropriate signed tokens. Budget total database connections across replicas, allow failure headroom, then load-test at the target latency. More API capacity can move the bottleneck to the database. Vertical scaling is also reasonable if its ceiling and availability meet the requirement.",
     alternatives:
       "A container service or managed application platform can supply the same capabilities. If later measurements identify a slow database query, improve that query or access pattern rather than continuing to add application instances.",
     pitfall:
@@ -194,7 +202,7 @@ export const questions: Record<string, Question> = {
       "Validate uploads before publication and control how approved images are read.",
     ],
     explanation:
-      "Use Amazon S3 for the image objects. After checking restaurant ownership, the API can issue a short-lived presigned upload URL for an application-chosen staging key. The browser uploads directly to S3. Keep the bucket private. Validate the object, then copy it to a separate serving key that the upload URL cannot overwrite, or pin the approved object version. Record that approved key or version in the database. Serve approved images through controlled reads or a CDN with a restricted origin.",
+      "Use S3 for image bytes and PostgreSQL for ownership and approved object identifiers. Authorize a short-lived upload URL for an application-chosen private staging key. Capture an immutable application-controlled copy or pin a specific object version BEFORE validation, then publish only those exact validated bytes. Presigned uploads can be repeated and overwrite their key; validating a mutable key and copying it later is unsafe. Restrict upload size, inspect the actual file type, and decode or scan as appropriate. The upload URL must never overwrite an approved object. Serve approved images through controlled reads or a CDN with a restricted origin.",
     alternatives:
       "Another object-storage service can serve the same role. For larger delivery traffic, CloudFront is a possible next step; object storage and a CDN solve different parts of the problem.",
     pitfall:
@@ -207,6 +215,10 @@ export const questions: Record<string, Question> = {
       {
         label: "Uploading with presigned URLs",
         url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/PresignedUrlUploadObject.html",
+      },
+      {
+        label: "OWASP file validation and upload limits",
+        url: "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html",
       },
     ],
     questionFrame: baseline,

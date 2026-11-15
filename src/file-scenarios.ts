@@ -31,6 +31,18 @@ const multipartSource = {
   label: "Amazon S3 multipart uploads",
   url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html",
 };
+const completionSource = {
+  label: "S3 multipart completion: part numbers and ETags",
+  url: "https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html",
+};
+const fencingSource = {
+  label: "Chubby: reject stale sequencers at the resource server (section 2.4)",
+  url: "https://storage.googleapis.com/gweb-research2023-media/pubtools/4444.pdf",
+};
+const failoverSource = {
+  label: "PostgreSQL failover and fencing the old primary",
+  url: "https://www.postgresql.org/docs/current/warm-standby-failover.html",
+};
 const checksums = {
   label: "Amazon S3 upload checksums",
   url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html",
@@ -236,7 +248,7 @@ export const fileQuestions = {
         "Verify completion and integrity before committing the manifest.",
       ],
       explanation:
-        "Create an authorized upload record and unique staged key. Initiate S3 multipart upload, issue short-lived permissions for the intended parts, and persist part numbers and their returned ETags or checksums. Resume with the stored upload ID and verified part list. Complete the upload with ordered parts, verify the assembled object's checksum and size, and only then publish a pointer through the API.",
+        "Create an authorized upload record and unique staged key. Initiate S3 multipart upload and issue short-lived permissions for the intended parts. Persist each part number and returned ETag; checksums add integrity checks but do not replace the ETags required for completion. Resume with the same upload ID. The API completes the ordered part list, checks the full completion result, verifies size and the chosen checksum type, then publishes the immutable reference. An initial HTTP 200 alone does not prove completion succeeded; the SDK handles embedded completion errors.",
       alternatives:
         "Use a resumable upload gateway if requirements require scanning bytes before they reach object storage. Budget its bandwidth and retry behavior.",
       pitfall:
@@ -244,7 +256,7 @@ export const fileQuestions = {
       difficulty: "Intermediate",
       answerFrame: multipart,
       view: fileView,
-      sources: [multipartSource, checksums, sources.uploads],
+      sources: [multipartSource, completionSource, checksums, sources.uploads],
     },
     "files-publish-retry": {
       parent: "files-resumable-upload",
@@ -430,7 +442,7 @@ export const fileQuestions = {
         "Retain objects through a grace period and reconcile failures.",
       ],
       explanation:
-        "Expire logical revisions using the product’s retention rule while retaining every live head and any held version. Mark an object reclaimable only when no retained reference exists. Make the mark and any restore compete through the same ownership lock or transactional reference state. Delete marked objects after a grace period covering readers, retry deletion safely, and reconcile missing or unclaimed storage.",
+        "Expire logical revisions under the retention rule while keeping live heads and held versions. Under the same object-ownership lock used by restores, mark an object reclaimable only if no retained reference exists. Once marked, forbid new references to that key; a restore must fail or copy retained bytes to a new live key. After a grace period covering supported readers, delete marked objects and reconcile failures. The durable marked state closes the gap between releasing the database lock and deleting from S3.",
       alternatives:
         "Store a separate object copy for each revision and use per-revision retention if the extra storage is acceptable.",
       pitfall:
@@ -573,7 +585,7 @@ export const fileQuestions = {
         "Test the time to restore service and state when the targets are missed.",
       ],
       explanation:
-        "Replicate the PostgreSQL manifest and change history to a recovery RDS instance and copy immutable S3 objects across regions. Track a recoverable watermark for which the database state and every referenced object can be restored. Measure its age against the five-minute RPO. Test activating the read service, authorization, and data checks against the 30-minute RTO. Independent green replication metrics alone cannot prove the combined recovery point.",
+        "Replicate the manifest and change history to a recovery database and copy immutable objects across regions. Retain a recoverable manifest view whose referenced bytes are all verified at the destination; a numeric watermark alone cannot reconstruct an overwritten head. Measure that complete view's age against the five-minute RPO and test read-service recovery against the 30-minute RTO. Asynchronous replication can exceed the target during a partition. A hard loss bound requires coordinating write acknowledgments with recoverable remote state, sacrificing write availability when that cannot be established.",
       alternatives:
         "Use point-in-time database restore plus verified object archives if their actual recovery time meets the targets.",
       pitfall:
@@ -636,7 +648,7 @@ export const fileQuestions = {
       difficulty: "Intermediate",
       answerFrame: promoted,
       view: recoveryView,
-      sources: [replicas, recovery, sources.locks],
+      sources: [replicas, recovery, failoverSource, fencingSource],
     },
     "files-fence-writers": {
       parent: "files-promote-region",
@@ -665,7 +677,7 @@ export const fileQuestions = {
         [manifestReplica.id]: { purpose: "Epoch-checked commits" },
       }),
       view: recoveryView,
-      sources: [sources.locks, recovery],
+      sources: [fencingSource, failoverSource, recovery],
     },
     "files-region-rejoin": {
       parent: "files-promote-region",
@@ -707,7 +719,7 @@ export const fileQuestions = {
         ],
       ),
       view: recoveryView,
-      sources: [replicas, replication, recovery],
+      sources: [replicas, replication, recovery, failoverSource],
     },
   }),
 };

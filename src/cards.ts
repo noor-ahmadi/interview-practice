@@ -14,11 +14,6 @@ export type RecallCard = {
   sources: { label: string; url: string }[];
 };
 
-const algorithms = {
-  label: "MIT 6.006 lecture notes",
-  url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/pages/lecture-notes/",
-};
-
 // Original questions. Shared IDs are permanent; private cards use a separate namespace.
 export const recallCards: RecallCard[] = [
   {
@@ -29,7 +24,7 @@ export const recallCards: RecallCard[] = [
     prompt:
       "Your API uses cache-aside for restaurant menus. What happens on a cache miss, and what can go wrong after a menu changes?",
     explanation:
-      "Read the cache first. On a miss, fetch the menu from the database, then cache it with an expiry. A write updates the database and invalidates or refreshes the cached entry. An older concurrent reader can still repopulate stale data after invalidation. Expiry bounds some stale reads; stricter freshness may need version checks or a different write/read protocol. ElastiCache can hold the hot entries; RDS PostgreSQL remains the durable source.",
+      "Read the cache first. On a miss, fetch the menu from the database, then cache it with an expiry. A write updates the database and invalidates or refreshes the cached entry. An older concurrent reader can still repopulate stale data after invalidation. A TTL limits residence after insertion, not source age when a delayed reader fills the cache. Stricter freshness may need source versions, age checks, or a different write/read protocol. ElastiCache can hold the hot entries; RDS PostgreSQL remains the durable source.",
     rubric: [
       "Describe the miss path through the database.",
       "Explain invalidation and the concurrent stale-fill race.",
@@ -64,7 +59,12 @@ export const recallCards: RecallCard[] = [
       "An inclusive range with a separate best answer works if its invariant and boundary updates are consistent.",
     pitfall:
       "Using hi = mid − 1 with this half-open invariant, or assuming arbitrary data gives a monotone predicate.",
-    sources: [algorithms],
+    sources: [
+      {
+        label: "Cornell: loop invariants and binary search",
+        url: "https://www.cs.cornell.edu/courses/cs2112/2015fa/lectures/lec_loopinv/",
+      },
+    ],
   },
   {
     id: "recall-idempotent-order",
@@ -86,6 +86,10 @@ export const recallCards: RecallCard[] = [
       "Generating a fresh key on each retry, or claiming a database transaction also atomically commits an external payment.",
     sources: [
       {
+        label: "AWS: making retries safe with idempotent APIs",
+        url: "https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/",
+      },
+      {
         label: "PostgreSQL constraints",
         url: "https://www.postgresql.org/docs/current/ddl-constraints.html",
       },
@@ -97,9 +101,9 @@ export const recallCards: RecallCard[] = [
     topic: "Algorithms",
     difficulty: "Intermediate",
     prompt:
-      "For nonnegative integers, find the shortest contiguous subarray whose sum is at least K > 0. Explain a linear sliding window and why negative numbers break its reasoning.",
+      "For nonnegative integers, find the shortest contiguous subarray whose sum is at least K > 0. Explain a linear sliding window, then trace why it fails on [1, -1, 5] with K = 5.",
     explanation:
-      "Extend the right end and add its value. While the sum is at least K, record the length, remove the leftmost value, and advance left. Nonnegative values make extending unable to lower the sum and shrinking unable to raise it, so discarding a left boundary is safe. Each index enters and leaves once: O(n) time and O(1) extra space. With negatives, an invalid window can become valid just by shrinking, so this rule can miss answers.",
+      "Extend the right end and add its value. While the sum is at least K, record the length, remove the leftmost value, and advance left. Nonnegative values make extending unable to lower the sum and shrinking unable to raise it, so discarding a left boundary is safe. Each index enters and leaves once: O(n) time and O(1) extra space. For [1, -1, 5] and K = 5, it records length 3, removes 1, and stops at sum 4; it misses the length-1 [5] window. A negative value can make an invalid window become valid just by shrinking.",
     rubric: [
       "Shrink repeatedly while valid, recording candidates first.",
       "Use nonnegativity to justify discarding boundaries.",
@@ -109,7 +113,16 @@ export const recallCards: RecallCard[] = [
       "With negative values, prefix sums and a monotonic deque solve the shortest-at-least-K version in O(n); binary search on an arbitrary window sum does not restore monotonicity.",
     pitfall:
       "Using the nonnegative-window algorithm unchanged for arrays with negative values.",
-    sources: [algorithms],
+    sources: [
+      {
+        label: "LeetCode problem: Minimum Size Subarray Sum",
+        url: "https://leetcode.com/problems/minimum-size-subarray-sum/",
+      },
+      {
+        label: "LeetCode problem: Shortest Subarray with Sum at Least K",
+        url: "https://leetcode.com/problems/shortest-subarray-with-sum-at-least-k/",
+      },
+    ],
   },
   {
     id: "recall-queue-redelivery",
@@ -154,7 +167,12 @@ export const recallCards: RecallCard[] = [
       "Use multi-source BFS for distance from the nearest source. Use 0–1 BFS for weights 0 and 1, or Dijkstra for general nonnegative weights.",
     pitfall:
       "Treating fewer edges as smaller total weight in a weighted graph.",
-    sources: [algorithms],
+    sources: [
+      {
+        label: "MIT 6.006: breadth-first search",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec9/",
+      },
+    ],
   },
   {
     id: "recall-replica-freshness",
@@ -199,7 +217,12 @@ export const recallCards: RecallCard[] = [
       "A reverse scan can keep candidate future days, removing temperatures that cannot answer the current day.",
     pitfall:
       "Popping equal temperatures when the question asks for a strictly warmer day, or storing only temperatures and losing positions.",
-    sources: [algorithms],
+    sources: [
+      {
+        label: "LeetCode problem: Daily Temperatures",
+        url: "https://leetcode.com/problems/daily-temperatures/",
+      },
+    ],
   },
   {
     id: "recall-object-storage",
@@ -232,9 +255,9 @@ export const recallCards: RecallCard[] = [
     topic: "Algorithms",
     difficulty: "Intermediate",
     prompt:
-      "How do prefix sums and a frequency map count contiguous subarrays with sum K when the array can contain negative numbers?",
+      "Derive the prefix-sum frequency-map algorithm for counting nonempty subarrays with sum K. Trace [1, -1, 1] with K = 0 and explain why you query before inserting.",
     explanation:
-      "Let prefix[0] = 0 and prefix[j] be the sum before index j. A subarray [i, j) sums to K exactly when prefix[i] = prefix[j] − K. Scan the values, maintaining a running sum and counts of earlier prefix sums. Initialize count[0] = 1. For each new sum s, add count[s − K] to the answer, then increment count[s]. With expected O(1) hash operations this takes O(n) time and O(n) extra space.",
+      "Let prefix[0] = 0 and prefix[j] be the sum before index j. A subarray [i, j) sums to K exactly when prefix[i] = prefix[j] − K. Scan the values, maintaining a running sum and counts of earlier prefix sums. Initialize count[0] = 1. For each new sum s, add count[s − K] to the answer, then increment count[s]. For [1, -1, 1] and K = 0, the repeated prefixes 0 and 1 contribute one match each, giving 2. With expected O(1) hash operations this takes O(n) time and O(n) extra space.",
     rubric: [
       "Derive the difference of two prefix sums.",
       "Seed zero and query before inserting the current sum.",
@@ -244,7 +267,16 @@ export const recallCards: RecallCard[] = [
       "An ordered map gives O(n log n) time with deterministic ordered-map operations. For a longest-subarray variant, store earliest indices instead of counts.",
     pitfall:
       "Inserting first when K = 0 and accidentally counting an empty subarray, or using a set that loses multiplicity.",
-    sources: [algorithms],
+    sources: [
+      {
+        label: "LeetCode problem: Subarray Sum Equals K",
+        url: "https://leetcode.com/problems/subarray-sum-equals-k/",
+      },
+      {
+        label: "MIT 6.006: hashing and expected bounds",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec4/",
+      },
+    ],
   },
   ...additionalCards,
   ...advancedCards,

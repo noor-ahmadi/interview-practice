@@ -2,13 +2,13 @@ import type { RecallCard } from "./cards.ts";
 import { sources as s } from "./scenario-authoring.ts";
 
 type Entry = Omit<RecallCard, "topic">;
-const mit = {
-  label: "MIT algorithm lecture notes",
-  url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/pages/lecture-notes/",
-};
 const dynamo = {
   label: "Amazon Dynamo paper",
   url: "https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf",
+};
+const caching = {
+  label: "AWS: cache failures, request coalescing, and negative caching",
+  url: "https://aws.amazon.com/builders-library/caching-challenges-and-strategies/",
 };
 
 const systemCards: Entry[] = [
@@ -29,7 +29,7 @@ const systemCards: Entry[] = [
       "Refresh hot entries before expiry or keep a small local read layer when the freshness contract allows it.",
     pitfall:
       "Assuming a higher cache hit rate guarantees the database survives every cache restart.",
-    sources: [s.cache, s.overload],
+    sources: [caching, s.overload],
   },
   {
     id: "recall-negative-cache",
@@ -48,7 +48,7 @@ const systemCards: Entry[] = [
       "An existence filter can reduce some misses if updates and false-positive handling are correct.",
     pitfall:
       "Caching a timeout as not found or retaining unlimited attacker-chosen keys.",
-    sources: [s.cache, s.overload],
+    sources: [caching, s.overload],
   },
   {
     id: "recall-ttl-freshness",
@@ -111,9 +111,9 @@ const systemCards: Entry[] = [
     title: "Retries can multiply an outage.",
     difficulty: "Foundation",
     prompt:
-      "A three-layer call chain retries each failed call three times. Why can this worsen overload, and how would you bound retries?",
+      "A three-layer call chain makes at most three total attempts per call at every layer. How many attempts can reach the deepest dependency for one top-level request, and how would you bound amplification?",
     explanation:
-      "If each layer makes three total attempts, one top-level call can trigger up to 27 downstream attempts. Define whether a number means retries or total attempts. Retry at a deliberate layer with a total deadline, bounded attempts, backoff, and jitter. Retry only appropriate failures and make side effects safe to repeat. A timeout means the outcome may be unknown, not necessarily that nothing happened.",
+      "Three total attempts at each of three layers can produce 3 × 3 × 3 = 27 attempts at the deepest dependency. Three retries after an initial attempt would instead mean 4 × 4 × 4 = 64. Retry at a deliberate layer with a total deadline, bounded attempts, backoff, and jitter. Retry only appropriate failures and make side effects safe to repeat. A timeout means the outcome may be unknown, not necessarily that nothing happened.",
     rubric: [
       "Explain multiplicative amplification with clear attempt semantics.",
       "Bound retries and spread them with jitter.",
@@ -160,7 +160,12 @@ const systemCards: Entry[] = [
       "Admission limits and short timeouts can be enough for a simple dependency without a separate breaker state machine.",
     pitfall:
       "Sending all rejected cache traffic to an already overloaded database.",
-    sources: [s.retries, s.overload],
+    sources: [
+      {
+        label: "Microsoft: circuit breaker states and recovery",
+        url: "https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker",
+      },
+    ],
   },
   {
     id: "recall-index-prefix",
@@ -188,7 +193,7 @@ const systemCards: Entry[] = [
     prompt:
       "Two doctors each see the other on call and independently go off call. Why can snapshot-based transactions violate the rule that someone must remain on call?",
     explanation:
-      "Each transaction reads a valid earlier snapshot and writes a different row. Their individual writes may not conflict even though the combined result violates a predicate across rows. Protect the shared invariant with appropriate locking of a common decision boundary or serializable transactions with bounded retry handling. A transaction alone is not a promise of serial execution at every isolation level.",
+      "Each transaction reads a valid earlier snapshot and writes a different row. Their individual writes may not conflict even though the combined result violates a predicate across rows. Under PostgreSQL Read Committed, lock a shared guard row before reading the on-call set, then re-evaluate and update while holding the lock. Every writer must use that boundary. Alternatively use serializable transactions and retry the whole transaction on a serialization failure. Under snapshot isolation, merely waiting on a lock does not refresh an already established snapshot. A transaction alone is not a promise of serial execution at every isolation level.",
     rubric: [
       "Explain the cross-row read/write dependency.",
       "Distinguish atomicity from serializability.",
@@ -425,8 +430,8 @@ const systemCards: Entry[] = [
       "Reading p99 as a maximum latency or averaging two p99 numbers into a correct global p99.",
     sources: [
       {
-        label: "Google SRE monitoring",
-        url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        label: "Prometheus: aggregating histograms and quantiles",
+        url: "https://prometheus.io/docs/practices/histograms/",
       },
     ],
   },
@@ -541,7 +546,12 @@ const algorithmCards: Entry[] = [
       "Weighted interval scheduling uses dynamic programming over compatible predecessors.",
     pitfall:
       "Choosing the shortest duration or earliest start without a proof, or applying the count rule to weighted rewards.",
-    sources: [mit],
+    sources: [
+      {
+        label: "University of Washington: interval scheduling exchange argument",
+        url: "https://courses.cs.washington.edu/courses/cse421/24au/lectures/lecture06-moregreedy-A.pdf",
+      },
+    ],
   },
   {
     id: "recall-two-pointers",
@@ -560,7 +570,16 @@ const algorithmCards: Entry[] = [
       "A hash map gives expected O(n) time on unsorted input with O(n) space; preserve original indices if sorting first.",
     pitfall:
       "Applying the endpoint proof to an unsorted array or reusing one index twice.",
-    sources: [mit],
+    sources: [
+      {
+        label: "LeetCode problem: Two Sum II",
+        url: "https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/",
+      },
+      {
+        label: "Cornell: loop invariants and binary search",
+        url: "https://www.cs.cornell.edu/courses/cs2112/2015fa/lectures/lec_loopinv/",
+      },
+    ],
   },
   {
     id: "recall-cycle-pointers",
@@ -569,7 +588,7 @@ const algorithmCards: Entry[] = [
     prompt:
       "Why do slow/fast pointers detect a linked-list cycle, and how can they locate its entry without extra visited storage?",
     explanation:
-      "Move one pointer one step and the other two, checking null safely. In a cycle, their relative distance changes by one modulo the cycle length, so they meet. At the meeting, reset one pointer to the head and advance both one step; the distance equations imply they meet at the entry. A list with a tail into a cycle is handled as well as a cycle beginning at the head. Time is O(n), extra space O(1).",
+      "Move one pointer one step and the other two, checking null safely. In a cycle, their relative distance changes by one modulo the cycle length, so they meet. Let the tail length be mu, cycle length lambda, and slow pointer's steps at the meeting be t. The fast pointer took 2t steps, so t is a multiple of lambda. The meeting is (t - mu) mod lambda steps past the entry. Reset one pointer to the head and advance both one step: after mu steps both are at the entry. Time is O(n), extra space O(1).",
     rubric: [
       "Explain the relative-motion argument.",
       "Describe the reset-and-walk entry step.",
@@ -579,7 +598,12 @@ const algorithmCards: Entry[] = [
       "A visited-node identity set gives a simpler entry detector with O(n) space.",
     pitfall:
       "Comparing node values instead of identities or dereferencing fast.next before checking it exists.",
-    sources: [mit],
+    sources: [
+      {
+        label: "LeetCode problem: Linked List Cycle II",
+        url: "https://leetcode.com/problems/linked-list-cycle-ii/",
+      },
+    ],
   },
   {
     id: "recall-list-reversal",
@@ -598,7 +622,16 @@ const algorithmCards: Entry[] = [
       "Recursive reversal uses O(n) call-stack space and needs a correct tail-link update.",
     pitfall:
       "Overwriting curr.next and then trying to use it to find the remaining suffix.",
-    sources: [mit],
+    sources: [
+      {
+        label: "LeetCode problem: Reverse Linked List",
+        url: "https://leetcode.com/problems/reverse-linked-list/",
+      },
+      {
+        label: "MIT 6.006: sequences and amortized array growth",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec2/",
+      },
+    ],
   },
   {
     id: "recall-merge-intervals",
@@ -617,7 +650,12 @@ const algorithmCards: Entry[] = [
       "A sweep of endpoints can support overlap counts and different boundary semantics.",
     pitfall:
       "Replacing the last end with a smaller nested end or mixing open and closed interval rules.",
-    sources: [mit],
+    sources: [
+      {
+        label: "LeetCode problem: Merge Intervals",
+        url: "https://leetcode.com/problems/merge-intervals/",
+      },
+    ],
   },
   {
     id: "recall-heap-top-k",
@@ -626,11 +664,11 @@ const algorithmCards: Entry[] = [
     prompt:
       "How does a min-heap of size k retain the largest k values of a stream, and what invariant supports its complexity?",
     explanation:
-      "Fill a min-heap up to k. Afterward, discard values no larger than its minimum, or replace that minimum with a larger value. The heap contains the largest k values of the prefix seen so far; its root is the smallest retained candidate. Processing n values takes O(n log k) time for 1 <= k <= n and O(k) extra space. Handle k = 0 separately, and define duplicates as separate occurrences if that is the task.",
+      "Fill a min-heap up to k. Afterward, discard values no larger than its minimum, or replace that minimum with a larger value. The heap contains the largest k values of the prefix seen so far; its root is the smallest retained candidate. Processing n values takes O(n log(k + 1)) time for 1 <= k <= n and O(k) extra space: O(n log k) for k >= 2 and O(n) for k = 1. Handle k = 0 separately, and define duplicates as separate occurrences if that is the task.",
     rubric: [
       "State the retained-prefix invariant.",
       "Use a min-heap and replace only the threshold.",
-      "Give O(n log k), O(k), and boundary behavior.",
+      "Give the time/space bounds and handle k = 0 and k = 1.",
     ],
     alternatives:
       "Sort a fixed array in O(n log n), or use selection when all data is available and ordered output is unnecessary.",
@@ -638,8 +676,8 @@ const algorithmCards: Entry[] = [
       "Using a max-heap of size k and discarding the largest retained item.",
     sources: [
       {
-        label: "Princeton priority queues",
-        url: "https://algs4.cs.princeton.edu/24pq/",
+        label: "MIT 6.006: binary heaps",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec8/",
       },
     ],
   },
@@ -684,7 +722,12 @@ const algorithmCards: Entry[] = [
       "BFS handles unit weights; Bellman-Ford supports negative edges and detects reachable negative cycles.",
     pitfall:
       "Finalizing a vertex on discovery or using Dijkstra unchanged with negative weights.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: Dijkstra's algorithm",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec13/",
+      },
+    ],
   },
   {
     id: "recall-topological-sort",
@@ -703,7 +746,16 @@ const algorithmCards: Entry[] = [
       "DFS reverse finishing order works with explicit cycle detection; a priority queue can choose a deterministic smallest eligible vertex at extra cost.",
     pitfall:
       "Assuming a topological order exists for every directed graph or forgetting disconnected vertices.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: depth-first search",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec10/",
+      },
+      {
+        label: "LeetCode problem: Course Schedule II",
+        url: "https://leetcode.com/problems/course-schedule-ii/",
+      },
+    ],
   },
   {
     id: "recall-disjoint-set",
@@ -746,14 +798,19 @@ const algorithmCards: Entry[] = [
       "BFS is suitable when only reachability or unweighted distances are needed.",
     pitfall:
       "Using an arbitrary stack pop order as a valid DFS finishing order for cycle or topological reasoning.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: depth-first search",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec10/",
+      },
+    ],
   },
   {
     id: "recall-binary-answer",
     title: "Search the answer only after proving monotonicity.",
     difficulty: "Intermediate",
     prompt:
-      "Given positive package weights in fixed order, why can you binary-search the smallest ship capacity that finishes within D days?",
+      "Given a nonempty list of positive integer package weights in fixed order and D >= 1 days, why can you binary-search the smallest capacity that finishes within D days?",
     explanation:
       "For a fixed capacity, greedily fill each day until the next package would exceed it, then start another day. This minimizes days under that capacity because sending a shorter prefix cannot let later days start farther ahead. Feasibility is monotone: more capacity cannot require more days. Search from the largest weight to the total weight. Each check is O(n), giving O(n log S) time over an integer range of size on the order of total weight S and O(1) extra space.",
     rubric: [
@@ -765,26 +822,40 @@ const algorithmCards: Entry[] = [
       "Direct enumeration can be sufficient when the capacity range is tiny.",
     pitfall:
       "Binary-searching a nonmonotone score or allowing reordering when the problem requires fixed order.",
-    sources: [mit],
+    sources: [
+      {
+        label: "LeetCode problem: Capacity To Ship Packages Within D Days",
+        url: "https://leetcode.com/problems/capacity-to-ship-packages-within-d-days/",
+      },
+      {
+        label: "Cornell: loop invariants and binary search",
+        url: "https://www.cs.cornell.edu/courses/cs2112/2015fa/lectures/lec_loopinv/",
+      },
+    ],
   },
   {
     id: "recall-dp-state",
     title: "A memo key must contain the future's relevant facts.",
     difficulty: "Foundation",
     prompt:
-      "What makes a dynamic-programming state sufficient, and how do you estimate its time complexity?",
+      "In 0/1 knapsack, two search paths reach item i with different remaining capacities. Why is memoizing only by i wrong? Define a sufficient state and derive the time bound.",
     explanation:
-      "Two histories may share one state only if their remaining choices and objective contribution are equivalent given that state. Identify the subproblem, transitions, base cases, and an acyclic evaluation order or terminating recursion. Estimate reachable states times work per state, including transition enumeration and copying. Memoization removes repeated subproblems; it does not make exponentially many distinct states polynomial.",
+      "Use (i, remaining_capacity): paths at the same item can have different legal next choices. Let F(i, c) be the best additional value using items i onward within capacity c. Skip with F(i + 1, c), or take value[i] + F(i + 1, c - weight[i]) when it fits. F(n, c) = 0. With positive integer weights, nonnegative capacity C, and O(1) transition work, there are O(nC) states. The bound is pseudopolynomial in numeric capacity; memoization does not make every state space polynomial.",
     rubric: [
-      "Explain why the state summarizes all relevant history.",
-      "Define transitions and base cases.",
-      "Count states and transition work.",
+      "Explain why both the item index and remaining capacity affect future choices.",
+      "Give skip/take transitions and the no-items-left base case.",
+      "Count O(nC) states and O(1) work per state; explain the numeric-capacity dependence.",
     ],
     alternatives:
       "A greedy invariant can remove state when a proof supports it; otherwise brute force provides a small-instance correctness oracle.",
     pitfall:
       "Memoizing by index alone when remaining capacity or previous choices affect the future.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: dynamic programming and subproblems",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec15/",
+      },
+    ],
   },
   {
     id: "recall-knapsack-direction",
@@ -803,7 +874,16 @@ const algorithmCards: Entry[] = [
       "A two-dimensional item-by-capacity table makes the dependency explicit at higher space cost.",
     pitfall:
       "Changing loop direction for convenience while silently changing 0/1 selection into unbounded selection.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: subset sum and pseudopolynomial bounds",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec18_pdf/",
+      },
+      {
+        label: "LeetCode problem: Partition Equal Subset Sum",
+        url: "https://leetcode.com/problems/partition-equal-subset-sum/",
+      },
+    ],
   },
   {
     id: "recall-lis-tails",
@@ -822,7 +902,12 @@ const algorithmCards: Entry[] = [
       "O(n squared) DP is simple and useful for reconstruction or small inputs; nondecreasing subsequences use a different equality boundary.",
     pitfall:
       "Returning tails as the actual subsequence or letting equal values extend a strictly increasing sequence.",
-    sources: [mit],
+    sources: [
+      {
+        label: "LeetCode problem: Longest Increasing Subsequence",
+        url: "https://leetcode.com/problems/longest-increasing-subsequence/",
+      },
+    ],
   },
   {
     id: "recall-backtrack-restore",
@@ -841,7 +926,16 @@ const algorithmCards: Entry[] = [
       "Immutable copies simplify restoration at a copying cost; explicit frames can avoid recursion-depth limits.",
     pitfall:
       "Appending the same mutable path object to every result or pruning without a correctness argument.",
-    sources: [mit],
+    sources: [
+      {
+        label: "LeetCode problem: Subsets",
+        url: "https://leetcode.com/problems/subsets/",
+      },
+      {
+        label: "LeetCode problem: Word Search",
+        url: "https://leetcode.com/problems/word-search/",
+      },
+    ],
   },
   {
     id: "recall-trie-prefix",
@@ -884,7 +978,16 @@ const algorithmCards: Entry[] = [
       "Explicit stack frames can avoid a runtime recursion limit, while breadth-first traversal can compute height by levels using width-dependent space.",
     pitfall:
       "Claiming every binary-tree traversal uses only O(log n) stack space.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: binary trees",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec6/",
+      },
+      {
+        label: "MIT 6.006: depth-first search",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec10/",
+      },
+    ],
   },
   {
     id: "recall-bst-bounds",
@@ -893,20 +996,24 @@ const algorithmCards: Entry[] = [
     prompt:
       "Why is checking left child < parent < right child insufficient to validate a binary search tree, and what invariant works?",
     explanation:
-      "A deeper node must satisfy bounds imposed by every ancestor, not just its parent. Recurse with an allowed interval: a left subtree tightens the upper bound and a right subtree tightens the lower bound. Define whether duplicates are allowed and on which side. An inorder traversal with the appropriate monotonicity condition is another approach. Validation is O(n) time and O(h) stack space, without arithmetic sentinel tricks that can overflow at integer extremes.",
+      "A deeper node must satisfy bounds imposed by every ancestor, not just its parent. Recurse with an allowed interval: a left subtree tightens the upper bound and a right subtree tightens the lower bound. Define whether duplicates are allowed and on which side. For distinct keys, strictly increasing inorder values are equivalent. If duplicates are allowed only on one side, nondecreasing inorder values alone cannot enforce that side policy; propagate inclusive/exclusive ancestor bounds. Validation is O(n) time and O(h) stack space, without arithmetic sentinel tricks that can overflow at integer extremes.",
     rubric: [
       "Identify an ancestor-bound counterexample.",
       "Propagate valid bounds consistently.",
       "Define duplicate policy and complexity.",
     ],
     alternatives:
-      "Inorder validation works with a retained previous value and a clearly defined duplicate rule.",
+      "For a no-duplicates contract, retain the previous inorder value and require a strict increase.",
     pitfall:
-      "Only comparing immediate children or subtracting one from a minimum integer bound.",
+      "Only comparing immediate children, using nondecreasing inorder values to enforce one-sided duplicates, or subtracting one from a minimum integer bound.",
     sources: [
       {
-        label: "Princeton binary search trees",
-        url: "https://algs4.cs.princeton.edu/32bst/",
+        label: "MIT 6.006: binary trees",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec6/",
+      },
+      {
+        label: "LeetCode problem: Validate Binary Search Tree",
+        url: "https://leetcode.com/problems/validate-binary-search-tree/",
       },
     ],
   },
@@ -927,7 +1034,16 @@ const algorithmCards: Entry[] = [
       "Parent pointers let you intersect ancestor chains; many static-tree queries can justify preprocessing.",
     pitfall:
       "Using BST value ordering on an arbitrary binary tree or ignoring a missing-target requirement.",
-    sources: [mit],
+    sources: [
+      {
+        label: "LeetCode problem: Lowest Common Ancestor of a Binary Tree",
+        url: "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-tree/",
+      },
+      {
+        label: "MIT 6.006: depth-first search",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec10/",
+      },
+    ],
   },
   {
     id: "recall-amortized-array",
@@ -946,7 +1062,12 @@ const algorithmCards: Entry[] = [
       "Chunked storage can avoid moving every element at once but changes locality and indexing tradeoffs.",
     pitfall:
       "Calling amortized constant time a probabilistic average over random inputs.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: sequences and amortized array growth",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec2/",
+      },
+    ],
   },
   {
     id: "recall-hash-complexity",
@@ -965,7 +1086,12 @@ const algorithmCards: Entry[] = [
       "Balanced ordered trees provide deterministic O(log n) structural operations and ordered traversal.",
     pitfall:
       "Treating every hash operation as a literal constant regardless of key size, collisions, or implementation.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: hashing and expected bounds",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec4/",
+      },
+    ],
   },
   {
     id: "recall-counting-sort",
@@ -984,7 +1110,12 @@ const algorithmCards: Entry[] = [
       "Comparison sorting handles arbitrary ordered keys; radix sorting uses bounded-digit passes with additional assumptions.",
     pitfall:
       "Calling counting sort O(n) while ignoring an unbounded or enormous key range.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: linear sorting",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec5/",
+      },
+    ],
   },
   {
     id: "recall-bitmask-state",
@@ -1003,7 +1134,12 @@ const algorithmCards: Entry[] = [
       "Backtracking with pruning can suit tiny instances; approximation or problem-specific structure may be necessary at larger k.",
     pitfall:
       "Claiming a bitmask makes exponential subset enumeration linear or memoizing only the visited set when endpoints matter.",
-    sources: [mit],
+    sources: [
+      {
+        label: "CMU 15-451: subset DP and the traveling salesperson problem",
+        url: "https://www.cs.cmu.edu/~15451-f23/lectures/lecture10-dp2.pdf",
+      },
+    ],
   },
   {
     id: "recall-bellman-ford",
@@ -1022,7 +1158,12 @@ const algorithmCards: Entry[] = [
       "Dijkstra is faster under nonnegative weights; a DAG can be relaxed in topological order even with negative edges.",
     pitfall:
       "Reporting an unreachable negative cycle as affecting the source's paths, or adding an edge weight to an infinity sentinel without guarding it.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: Bellman-Ford",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec12/",
+      },
+    ],
   },
 ];
 

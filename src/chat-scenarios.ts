@@ -8,6 +8,14 @@ import {
   sources as s,
 } from "./scenario-authoring.ts";
 
+const socketSecurity = {
+  label: "OWASP WebSocket authorization and backpressure",
+  url: "https://cheatsheetseries.owasp.org/cheatsheets/WebSocket_Security_Cheat_Sheet.html",
+};
+const changeTracking = {
+  label: "Microsoft Graph change tracking and resynchronization",
+  url: "https://learn.microsoft.com/en-us/graph/delta-query-overview",
+};
 const direct = evolve(application, {
   customer: { name: "Sender", purpose: "Send a direct message" },
   restaurant: { name: "Recipient", purpose: "Read a conversation" },
@@ -28,7 +36,7 @@ const catchup = evolve(live, {
 });
 const gaps = evolve(catchup, {
   api: { purpose: "Server-issued cursors" },
-  database: { purpose: "Messages + retention floor" },
+  database: { purpose: "Messages + change log" },
 });
 const dedup = evolve(catchup, {
   database: { purpose: "Unique send IDs + results" },
@@ -153,24 +161,24 @@ export const chatQuestions: Record<string, Question> = {
     title: "Ten coworkers want to chat.",
     difficulty: "Foundation",
     prompt:
-      "Design direct messages for ten coworkers. A sender posts text and a recipient opens the conversation to read it. What is the smallest architecture that keeps an acknowledged message after an application restart?",
+      "Design direct messages for ten coworkers. A sender posts text and a recipient opens the conversation to read it. Propose a small architecture, send/history APIs, and the records needed to keep an acknowledged message after an application restart.",
     givens: [
       "Around 200 messages a day",
       "Polling is acceptable initially",
       "Only conversation members may read or send",
     ],
     rubric: [
-      "Persist messages and membership in a durable store.",
+      "Describe send/history APIs and durable message and membership records.",
       "Acknowledge only after commit and authorize each operation.",
       "Choose stable message identities and a server-defined conversation order.",
     ],
     explanation:
-      "An EC2 API and RDS PostgreSQL are enough to start. Store conversations, memberships, stable message IDs, and message contents. Check membership on reads and writes, and acknowledge a send only after commit. Assign a per-conversation position while locking its conversation row, committing the position and message together; this gives a clear local order without promising a global order. Initially the recipient can poll for later positions. Measure latency and database load, and protect the deployment with backups and an availability plan.",
+      "One API and PostgreSQL are a reasonable baseline. POST /conversations/{id}/messages sends text; GET /conversations/{id}/messages?after=position&limit=50 reads a bounded page. Store conversations, memberships, and messages with stable ID, sender, body and conversation position. Check membership on both paths and acknowledge only after commit. Allocate position under a conversation-row lock and commit it with the message, so later committed positions cannot skip an earlier uncommitted send. A normal sequence alone does not guarantee commit order. This serializes writes within one conversation, not globally, and can become a hot-channel bottleneck. Poll initially; decide backups and availability from the requirements.",
     alternatives:
       "A managed application runtime can replace EC2. A transactional document store can work with an explicit conversation-order and access-control strategy.",
     pitfall:
       "Keeping acknowledged messages only in a process, or trusting a conversation ID as permission to read it.",
-    sources: [s.transactions, s.locks, s.auth],
+    sources: [s.transactions, s.locks, s.isolation, s.auth],
     questionFrame: actors(direct),
     answerFrame: direct,
     children: ["chat-live", "chat-history"],
@@ -197,12 +205,12 @@ export const chatQuestions: Record<string, Question> = {
       "Authenticate connections and authorize conversation subscriptions.",
     ],
     explanation:
-      "Let the EC2 API own authenticated WebSocket connections and subscribe them only to authorized conversations. Commit each message and its conversation position to PostgreSQL before acknowledging acceptance or notifying recipients. A socket delivery is a transport event, not proof of durable storage or human reading. Bound buffers, timeouts, and connection lifetime. Keep an HTTP history endpoint because connectivity is temporary and the database, rather than socket memory, owns the conversation.",
+      "Use authenticated WSS connections and authorize each send and subscription. A connection established while a user was a member is not permanent permission: revoke or recheck access before later protected delivery according to the stated revocation boundary. Commit messages and conversation positions before acknowledging or notifying recipients. A successful socket write proves neither client persistence nor human reading. Bound buffers, idle timeouts and session lifetime. Keep an authorized HTTP history endpoint for reconnects because PostgreSQL, rather than socket memory, owns the conversation.",
     alternatives:
       "Server-sent events plus HTTP sends fit one-way server updates. Long polling is a reasonable simpler option when measured scale and latency permit it.",
     pitfall:
       "Acknowledging a send before commit, or treating a successful socket write as a read receipt.",
-    sources: [s.sockets, s.transactions, s.auth],
+    sources: [s.sockets, s.transactions, socketSecurity],
     questionFrame: direct,
     answerFrame: live,
     children: ["chat-reconnect", "chat-slow-reader"],
@@ -219,7 +227,7 @@ export const chatQuestions: Record<string, Question> = {
     prompt:
       "Continue from live direct messages. A recipient loses connectivity for a minute while several messages commit. How would reconnecting recover missing messages without losing messages that arrive during catch-up?",
     givens: [
-      "Messages have durable per-conversation positions",
+      "Conversation positions are allocated under a row lock and committed with their messages",
       "The device remembers its last applied cursor",
       "Live notifications and history responses can overlap",
     ],
@@ -249,7 +257,7 @@ export const chatQuestions: Record<string, Question> = {
     title: "The next position no longer exists.",
     difficulty: "Intermediate",
     prompt:
-      "Continue from cursor catch-up. A client has applied position 101. Position 102 was legitimately deleted, but 103 exists. The client waits forever for 102. How should the cursor protocol handle gaps and retention?",
+      "Continue from cursor catch-up. A client has applied position 101. Message 102 was deleted, but 103 exists. Should it wait for 102? Also explain how a device already past 103 learns about a later deletion of 101, and what happens when its cursor expires.",
     givens: [
       "Positions order messages; they do not promise every integer still exists",
       "Deleted message contents must not be returned",
@@ -257,16 +265,16 @@ export const chatQuestions: Record<string, Question> = {
     ],
     rubric: [
       "Scan by ordered positions rather than waiting for consecutive integers.",
-      "Return a server-defined continuation and distinguish an empty page from a retention gap.",
+      "Return a server-defined continuation; propagate later edits/deletes at new change positions rather than only marking an old message row.",
       "Require explicit resynchronization when a cursor is no longer recoverable.",
     ],
     explanation:
-      "Query the ordered log for positions greater than the cursor, so 103 can follow 101 without waiting for 102. A server-issued continuation may also advance through a scanned range containing deleted records. Define that range against a durable high-water mark so a late commit cannot appear behind the cursor; the transactional conversation ordering is the boundary. Retain deletion markers when clients need to remove previously applied messages. If the cursor predates the retention floor, return an explicit resync response with a current authorized snapshot rather than claiming no messages were missed.",
+      "Read positions greater than the cursor; 103 may follow 101 without waiting for 102. A continuation can advance through a scanned range up to a committed high-water mark. For later edits or deletions, an original message-position cursor is insufficient: a device past 103 never revisits row 101. Append a deletion/change event at a NEW transactional change position, referencing the stable message ID, and resume changes by that cursor. Retain these events for the recovery window. A tombstone only at the old message position cannot notify caught-up devices. Expired change cursors require an explicit authorized resync. This is a proposed protocol; the linked Graph API illustrates change tracking and reset semantics.",
     alternatives:
       "A durable log offset can supply continuation semantics. Its compaction and retention rules still need an explicit client recovery contract.",
     pitfall:
       "Assuming sequence arithmetic proves a message is missing, or silently treating an expired cursor as up to date.",
-    sources: [s.pagination, s.transactions],
+    sources: [s.pagination, s.transactions, changeTracking],
     questionFrame: catchup,
     answerFrame: gaps,
     children: [],
@@ -330,7 +338,7 @@ export const chatQuestions: Record<string, Question> = {
       "Advertised flow-control credits or a pull-based delivery protocol can let a client request bounded batches.",
     pitfall:
       "Growing a per-socket list forever, or making one broadcast wait for every recipient before serving anyone else.",
-    sources: [s.sockets, s.overload],
+    sources: [socketSecurity, s.overload],
     questionFrame: live,
     answerFrame: slow,
     children: [],
@@ -441,7 +449,7 @@ export const chatQuestions: Record<string, Question> = {
     title: "A team shares ten channels.",
     difficulty: "Foundation",
     prompt:
-      "Design text channels for a team with 5,000 registered members. Measurements show around 100 active readers and ten sends per second at the peak. Where would you start, and which facts determine whether to distribute the service?",
+      "Design text channels for a team with 5,000 registered members. Measurements show 100 active readers, each polling one channel every two seconds, and ten sends per second at peak. Estimate request rate, describe a send/history API and data model, and justify whether to distribute the service.",
     givens: [
       "Channel membership controls reads and sends",
       "Polling is acceptable for the first release",
@@ -449,11 +457,11 @@ export const chatQuestions: Record<string, Question> = {
     ],
     rubric: [
       "Persist channel membership and durable messages.",
-      "Use measured workload rather than registered-user count to choose capacity.",
+      "Estimate 50 poll reads plus ten sends per second before retries, then account for payload size, fanout and measured latency.",
       "Define acknowledgment, ordering, and access boundaries.",
     ],
     explanation:
-      "Start with an EC2 API and indexed RDS PostgreSQL records for channels, memberships, and messages. Acknowledge after durable commit and define an immutable channel ordering position, serialized with the message transaction. Authorize reads and sends against membership. Measure polling traffic, connection counts, database latency, and resource limits under representative load. Registered users alone do not establish a need for sharding. Backups and application availability still need explicit decisions even at a modest request rate.",
+      "The supplied workload is about 50 polling reads/second plus ten sends/second, before retries and other endpoints. Start with an API and PostgreSQL tables for channels, memberships and messages. POST /channels/{id}/messages and a bounded GET history endpoint check membership. Serialize each channel's position allocation with its message commit, then acknowledge. This is a baseline to load-test, not a guarantee that one instance meets any latency target. Estimate bytes per message, retention storage, active-channel skew and read fanout; choose availability and recovery targets. A registered-user count alone does not justify sharding.",
     alternatives:
       "Managed compute and a suitable transactional datastore can fill the same roles. Long polling may improve freshness before a persistent-connection deployment is justified.",
     pitfall:
@@ -480,12 +488,12 @@ export const chatQuestions: Record<string, Question> = {
       "Membership must still govern subscriptions",
     ],
     rubric: [
-      "Distribute authenticated persistent connections with measured headroom.",
+      "Calculate that three instances provide only bare capacity; at least four are needed to retain 30,000-connection capacity after one loss, before extra headroom.",
       "Share notification hints across instances and fan out to local authorized sockets.",
       "Keep notification transport distinct from the durable message log.",
     ],
     explanation:
-      "An Application Load Balancer can route WebSocket connections to EC2 replicas. Provision beyond the bare three-instance capacity if a failure must be tolerated. Each replica tracks its own authorized sockets and subscribes to channel hints through ElastiCache running Valkey Pub/Sub. Publish only committed message identities. Replicas deliver hints to their local members, while PostgreSQL remains the durable log. Pub/Sub is at-most-once and does not retain disconnected subscribers' messages. A work queue that gives each message to one consumer is not automatically a broadcast mechanism.",
+      "At the supplied limit, three instances hold 30,000 connections with no failure capacity. Four leave three after one failure, still at the measured ceiling; allow additional headroom and test reconnect bursts and uneven connections. ALB routes WebSockets to replicas, each managing its authorized sockets. Use Valkey Pub/Sub for cross-instance hints about committed messages, and recheck membership on content fetches; stale subscriptions must not grant access. Pub/Sub is at-most-once and retains no replay for a disconnected subscriber. PostgreSQL remains the durable log. A competing-consumer queue does not broadcast every message to every connection server.",
     alternatives:
       "A durable broker with an appropriate subscription model or a managed connection gateway can replace Pub/Sub and EC2 connection management.",
     pitfall:
@@ -515,7 +523,7 @@ export const chatQuestions: Record<string, Question> = {
       "Continue from channel Pub/Sub. A message commits, but a publisher crashes before sending its hint or a subscriber disconnects briefly. How can clients converge on the committed channel history?",
     givens: [
       "Pub/Sub does not replay lost hints",
-      "The durable channel log has ordered positions",
+      "Channel positions are allocated under a row lock and committed with their messages",
       "A client remembers its applied position",
     ],
     rubric: [
@@ -561,7 +569,7 @@ export const chatQuestions: Record<string, Question> = {
       "A separate archive can support older reads with different latency and cost. Deliberate local-only history is possible if privacy and deletion policies allow it.",
     pitfall:
       "Returning an empty successful page and advancing the cursor as if no history had been lost.",
-    sources: [s.pagination, s.auth],
+    sources: [changeTracking, s.auth],
     questionFrame: missed,
     answerFrame: retention,
     children: [],
@@ -625,7 +633,10 @@ export const chatQuestions: Record<string, Question> = {
       "A dedicated presence service can manage leases at larger scale. At small scale, a database heartbeat table with bounded cleanup can be sufficient.",
     pitfall:
       "Storing a permanent online boolean cleared only by a graceful disconnect.",
-    sources: [s.cache, s.sockets],
+    sources: [
+      { label: "Valkey expiring keys and heartbeat refresh", url: "https://valkey.io/commands/expire/" },
+      socketSecurity,
+    ],
     questionFrame: fanout,
     answerFrame: presence,
     children: [],
@@ -657,7 +668,10 @@ export const chatQuestions: Record<string, Question> = {
       "Proxy small uploads through the application when that simplifies validation. A managed file service can supply the storage and scanning boundary.",
     pitfall:
       "Making the bucket public because message IDs are difficult to guess, or validating a key that can still be overwritten afterward.",
-    sources: [s.uploads, s.s3, s.auth],
+    sources: [s.uploads, s.s3, s.auth, {
+      label: "OWASP file validation and upload limits",
+      url: "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html",
+    }],
     questionFrame: team,
     answerFrame: attachments,
     children: ["chat-attachment-revoke", "chat-upload-orphan"],

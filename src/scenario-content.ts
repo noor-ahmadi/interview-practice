@@ -67,6 +67,14 @@ const cacheSource = {
   label: "AWS cache-aside strategies",
   url: "https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html",
 };
+const isolationSource = {
+  label: "PostgreSQL snapshots and concurrent updates",
+  url: "https://www.postgresql.org/docs/current/transaction-iso.html",
+};
+const cacheSafetySource = {
+  label: "AWS cache freshness and failure design",
+  url: "https://aws.amazon.com/builders-library/caching-challenges-and-strategies/",
+};
 const queueSource = {
   label: "SQS at-least-once delivery",
   url: "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/standard-queues-at-least-once-delivery.html",
@@ -428,7 +436,7 @@ const foodQuestions: Record<string, Question> = {
     alternatives:
       "Another object-storage service can fill the same role. A controlled proxy upload can simplify validation for small files, at the cost of application bandwidth. Ownership checks and approval still matter.",
     explanation:
-      "Use Amazon S3 for image objects. After checking restaurant ownership, the API issues a short-lived presigned upload URL for an application-chosen staging key. The browser uploads directly to a private bucket. Capture an immutable application-controlled copy or pin a specific S3 version before validation, then publish only those exact validated bytes. The upload URL must not overwrite the approved object. Record its approved key or version in PostgreSQL and use controlled reads. A successful upload alone never makes an image public.",
+      "Use S3 for image objects. After checking restaurant ownership, issue a short-lived upload URL for an application-chosen private staging key. Capture an immutable application-controlled copy or pin a specific S3 version before validation, then publish only those exact validated bytes. Enforce size limits, inspect actual file type and safely decode or scan the captured image. The upload URL must not overwrite the approved object. Record its approved key or version in PostgreSQL and use controlled reads. A successful upload alone never makes an image public.",
     focus: {
       question: ["restaurant", "api", "database"],
       answer: ["restaurant", "api", "database", "photos"],
@@ -461,12 +469,12 @@ const foodQuestions: Record<string, Question> = {
       "Keep order validation independent of cached menu data.",
     ],
     explanation:
-      "Put disposable menu entries in Amazon ElastiCache. On a miss, read RDS PostgreSQL and cache the result only until its 30-second freshness window ends, measured from the database read rather than a delayed cache fill. Discard late fills and invalidate or refresh after a committed menu change. A concurrent old reader can refill stale data; version checks can prevent that race, while the age bound limits its effect. Coalesce simultaneous misses, cap fallback database concurrency, and validate price and stock when accepting an order. Measure hit rate and database load.",
+      "Cache disposable menu entries in ElastiCache. On a miss, use a fresh primary-database snapshot and budget freshness from the START of that read, not a delayed cache fill. A lagging replica or an old transaction snapshot needs its own age bound. Use only the remaining 30-second budget as TTL; reject late fills and account for response delivery time in the contract. Invalidate after writes, but retain the age limit because an older reader can refill after invalidation. Coalesce misses, cap fallback concurrency, and validate price and stock in the order transaction. A plain 30-second TTL set after fetching is not itself a 30-second freshness guarantee.",
     alternatives:
       "A small local cache is simpler for one process, but instances can disagree and lose entries independently. Versioned cache keys or a write-through policy fit stricter update requirements.",
     pitfall:
       "Trusting cached availability during checkout or sending every cache miss to an unprotected database.",
-    sources: [cacheSource],
+    sources: [cacheSource, isolationSource, cacheSafetySource],
     questionFrame: scaled,
     answerFrame: cachedMenus,
     children: [],
@@ -621,7 +629,7 @@ const foodQuestions: Record<string, Question> = {
     title: "One kitchen. Limited portions.",
     difficulty: "Foundation",
     prompt:
-      "Design a preorder service for one restaurant. Customers reserve a portion for a pickup window, and the kitchen sets the available quantity. What is a small, reliable starting architecture that keeps accepted reservations durable?",
+      "Design a preorder service for one restaurant. Customers reserve a portion for a pickup window, and the kitchen sets the available quantity. Describe a small architecture, a reservation API, and the data that must commit together to preserve a reservation.",
     givens: [
       "Around 1,000 customers visit during a lunch release",
       "Each pickup window has a fixed number of portions",
@@ -633,7 +641,7 @@ const foodQuestions: Record<string, Question> = {
       "Explain a simple starting deployment, capacity measurements, and its failure limits.",
     ],
     explanation:
-      "Start with an EC2 application and RDS PostgreSQL. Keep stock and accepted orders in the same transactional database, validate on the server, and acknowledge a reservation only after its transaction commits. A browser’s displayed availability is advisory. Use backups and a deployment appropriate to the availability target; one application instance is still a failure point. The stated customer count alone does not justify a distributed inventory system. Measure peak request rate and database behavior before choosing more infrastructure.",
+      "Start with one application and a transactional database, such as EC2 and RDS PostgreSQL. POST /reservations accepts a pickup-window ID, quantity and request key. Keep pickup-window capacity/remaining stock and reservations (customer, window, quantity, state) together; stock decrement and reservation insertion must commit atomically before acknowledgment. GET /reservations/{id} checks ownership. Displayed availability is advisory. One API instance remains a failure point, so clarify availability and recovery targets. A count of 1,000 customers gives no peak request rate or concurrency without a time window; measure those before distributing inventory.",
     alternatives:
       "A managed application runtime or a serverless API can provide the compute. A different transactional database can work if it supports the reservation invariants and expected workload.",
     pitfall:
@@ -671,12 +679,12 @@ const foodQuestions: Record<string, Question> = {
       "Handle duplicate requests and retryable transaction failures deliberately.",
     ],
     explanation:
-      "Within one PostgreSQL transaction, conditionally decrement the relevant stock row only when remaining quantity is sufficient, check that a row changed, and insert the order. Roll back both changes if any step fails. A SELECT FOR UPDATE flow can instead lock the stock row before checking it. A check constraint is a useful additional boundary. Use a customer-scoped request key so a timed-out retry does not reserve twice, and use bounded retries for retryable transaction errors.",
+      "For a validated positive quantity q, one transaction can run UPDATE stock SET remaining = remaining - :q WHERE window_id = :id AND remaining >= :q RETURNING remaining, then insert the reservation only if a row was returned. At PostgreSQL Read Committed, a concurrent update to that row waits and rechecks the condition against its updated value. Roll back the decrement if insertion fails. SELECT FOR UPDATE followed by the check is another option. Add a nonnegative-stock constraint and a unique customer/request key in the same transaction. Retry the whole transaction after a serialization failure or deadlock, with bounds.",
     alternatives:
       "Serializable transactions can protect richer invariants, but serialization failures still need retry handling. Partition stock by independent pickup windows when business rules allow it.",
     pitfall:
       "Separating the availability check and decrement without concurrency control, or decrementing stock outside the order transaction.",
-    sources: [pg, transactions],
+    sources: [pg, isolationSource],
     questionFrame: preorders,
     answerFrame: atomicStock,
     children: ["delivery-hold-expiry", "delivery-price-snapshot"],
@@ -703,7 +711,7 @@ const foodQuestions: Record<string, Question> = {
       "Use retryable cleanup while distinguishing validity from cleanup timeliness.",
     ],
     explanation:
-      "Persist each hold as held, confirmed, or expired with a server-assigned deadline. Lock the hold row and recheck its state and current database time before confirming or expiring it; a transaction-start timestamp can be stale after waiting for a lock. Confirmation requires a held state before the deadline. An EC2 worker transitions due held rows to expired and returns stock in that transaction. Cleanup delays may keep stock unavailable, but must not allow late confirmation or a second release. Monitor expiry lag as well as correctness.",
+      "Persist each hold as held, confirmed, or expired with a server-assigned deadline. Lock the hold row, then check its state and clock_timestamp(); PostgreSQL now() is the transaction-start time and can be stale after lock waits. Define confirmation as valid at this locked decision point, even if commit finishes later. An expiry worker transitions due held rows to expired and returns stock in that transaction. Use a consistent lock order across reservation, confirmation and cleanup to limit deadlocks. Late cleanup may keep stock unavailable, but must not permit a second release or confirmation first checked after expiry. Monitor expiry lag.",
     alternatives:
       "A durable scheduler or delayed queue can prompt cleanup, but the database state and deadline still decide whether an operation is valid. Opportunistic cleanup can complement a background worker.",
     pitfall:
@@ -843,16 +851,16 @@ const foodQuestions: Record<string, Question> = {
     ],
     rubric: [
       "Keep committed kitchen state in PostgreSQL and cache only a disposable read view.",
-      "Choose bounded expiry/invalidation and protect the cache-miss path.",
+      "Budget freshness across cache age, polling and delivery, and evaluate whether per-order reads actually reuse cached entries.",
       "Use an appropriate polling or push strategy and authorize each order read.",
     ],
     explanation:
-      "Commit kitchen changes to RDS PostgreSQL first. Cache status views in ElastiCache with a five-second freshness window measured from the database read, discard late fills, and invalidate after committed updates. Authorize the customer before returning a view. Bound database fallback and coalesce simultaneous requests where practical. Use polling backoff and jitter, conditional responses, or push updates when their connection and recovery costs are justified. The cache is disposable: losing it must not erase a kitchen transition or expose another customer’s order.",
+      "1,000 clients polling every two seconds produce about 500 requests/second. Keep authoritative state in PostgreSQL. The five-second display-lag budget includes snapshot age, the next poll and delivery: two seconds to the next poll plus one second for delivery leaves at most two seconds of cache age. Expire from a fresh primary read's start and reject late fills. But if each client reads a different order once per TTL, cache reuse may be negligible. Measure hit rate before relying on the illustrated cache; bound database misses. If connectivity or load breaks the freshness budget, show stale/unavailable status. Conditional responses save bytes but still require validation work.",
     alternatives:
-      "For a measured workload that the database handles comfortably, indexed reads with slower polling may be sufficient. Push updates still need reconnect and resynchronization behavior.",
+      "Indexed reads may already meet the measured load. Slower polling is possible only within the freshness budget. Push updates or a maintained read view can reduce repeated database reads, but need recovery, authorization and a bounded update lag.",
     pitfall:
       "Persisting kitchen status only in the cache, or using a cache key as a substitute for authorization.",
-    sources: [cacheSource],
+    sources: [cacheSource, isolationSource, cacheSafetySource],
     questionFrame: preorders,
     answerFrame: cachedStatus,
     children: ["delivery-cache-outage", "delivery-status-races"],

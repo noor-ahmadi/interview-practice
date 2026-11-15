@@ -1,10 +1,6 @@
 import type { RecallCard } from "./cards.ts";
 import { sources } from "./scenario-authoring.ts";
 
-const mit = {
-  label: "MIT 6.006 lecture notes",
-  url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/pages/lecture-notes/",
-};
 const recovery = {
   label: "AWS disaster recovery strategies",
   url: "https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_planning_for_recovery_disaster_recovery.html",
@@ -19,7 +15,7 @@ export const advancedCards: RecallCard[] = [
     prompt:
       "A feed processes 80 posts per second. The average post has 250 eligible readers and one author has two million. Estimate the normal timeline write load and explain when to pull on read.",
     explanation:
-      "At the stated mean, the feed generates about 20,000 recipient writes per second before retries. A single two-million-follower post can dominate the queue, so inspect the distribution and the maximum backlog age rather than sizing only to the mean. A hybrid pushes ordinary posts and merges heavy authors’ recent posts on read under the same total order.",
+      "At the stated mean, the feed generates about 20,000 recipient writes per second before retries. A single two-million-follower post can dominate the queue, so inspect the distribution and the maximum backlog age rather than sizing only to the mean. One possible hybrid pushes ordinary posts and merges heavy authors’ recent posts on read under the same total order. This reduces publication work but adds read work; choose it only if those merges fit the read latency and capacity budget.",
     rubric: [
       "Calculate the recipient writes per second.",
       "Identify the long-tail burst and relevant backlog signal.",
@@ -29,7 +25,13 @@ export const advancedCards: RecallCard[] = [
       "Shard large follower ranges and reserve worker capacity when read-time merging cannot meet latency requirements.",
     pitfall:
       "Multiplying by the average describes aggregate work over that window. It does not bound any individual publication.",
-    sources: [sources.overload, sources.indexes],
+    sources: [
+      {
+        label: "LinkedIn Engineering: fan-out on write versus fan-out on read",
+        url: "https://www.linkedin.com/blog/engineering/feed/followfeed-linkedin-s-feed-made-faster-and-smarter",
+      },
+      sources.overload,
+    ],
   },
   {
     id: "recall-heap-merge",
@@ -39,17 +41,26 @@ export const advancedCards: RecallCard[] = [
     prompt:
       "You can inspect one current element from each of k sorted streams. How do you emit all n elements in sorted order, and what state do you keep?",
     explanation:
-      "Put the head of each nonempty stream in a min-heap tagged with its source. The heap minimum is the global minimum because all unseen items in each stream follow that stream’s head. Pop it, emit it, and add the next item from that source if any. Heap construction is O(k), the merge costs O(n log k) for k ≥ 2, and the heap uses O(k) space.",
+      "Put the head of each nonempty stream in a min-heap tagged with its source. The heap minimum is the global minimum because all unseen items in each stream follow that stream’s head. Pop it, emit it, and add the next item from that source if any. Inspecting the streams and constructing the heap takes O(k). Total time is O(k + n log(k + 1)) and heap space is O(k); a single stream needs only O(n) traversal.",
     rubric: [
       "Explain why one candidate per stream suffices.",
       "Replace an emitted head with the next item from its own stream.",
       "Give complexity in total elements and stream count.",
     ],
     alternatives:
-      "Pairwise merging in a balanced merge tree also takes O(n log k) work and can be a better fit for in-memory runs.",
+      "Pairwise merging in a balanced merge tree also takes O(k + n log(k + 1)) work and can be a better fit for in-memory runs.",
     pitfall:
       "Enqueueing every element defeats bounded memory. Equal keys may need a deterministic tie-breaker when stability is required.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: binary heaps",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec8/",
+      },
+      {
+        label: "Python heapq: merging sorted inputs",
+        url: "https://docs.python.org/3/library/heapq.html#heapq.merge",
+      },
+    ],
   },
   {
     id: "recall-snapshot-watermark",
@@ -59,17 +70,22 @@ export const advancedCards: RecallCard[] = [
     prompt:
       "A client downloads an initial snapshot in pages while writes continue. What position must it resume from, and what happens if its cursor expires?",
     explanation:
-      "Each page must describe one consistent generation paired with a source watermark W. Retain the ordered changes after W for the supported handoff period. Once the client has installed the snapshot, apply changes strictly after W and commit each local cursor with its updates. If required log records are gone, require a fresh snapshot and preserve local pending edits separately.",
+      "One safe protocol makes every page describe one consistent generation paired atomically with a source watermark W. Retain the ordered changes after W for the supported handoff period. Once the client has installed the snapshot, apply changes strictly after W and commit each local cursor with its updates. If required log records are gone, require a fresh snapshot and preserve local pending edits separately.",
     rubric: [
       "Pin every snapshot page to the same generation.",
       "Identify the first change and the retention requirement.",
       "Handle an expired cursor explicitly.",
     ],
     alternatives:
-      "Use a storage-native consistent snapshot and change-stream resume token when their handoff contract is documented.",
+      "Use a storage-native snapshot/change-stream handoff, such as a PostgreSQL logical slot with its exported snapshot. Other snapshot-and-reconciliation protocols can work, but must prove no gaps rather than just choose a timestamp.",
     pitfall:
       "Paging live state and then taking a new resume position can omit an update made between pages.",
-    sources: [sources.isolation, sources.transactions],
+    sources: [
+      {
+        label: "PostgreSQL: logical decoding, replay, and exported snapshots",
+        url: "https://www.postgresql.org/docs/current/logicaldecoding-explanation.html",
+      },
+    ],
   },
   {
     id: "recall-state-bfs",
@@ -89,7 +105,16 @@ export const advancedCards: RecallCard[] = [
       "Prune states if an equal or earlier arrival at the same cell has at least as much remaining budget. Preserve that distance condition.",
     pitfall:
       "A faster path to a cell may have already spent the resource needed to reach the goal.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: breadth-first search",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec9/",
+      },
+      {
+        label: "LeetCode problem: Shortest Path in a Grid with Obstacles Elimination",
+        url: "https://leetcode.com/problems/shortest-path-in-a-grid-with-obstacles-elimination/",
+      },
+    ],
   },
   {
     id: "recall-multipart-publish",
@@ -99,7 +124,7 @@ export const advancedCards: RecallCard[] = [
     prompt:
       "A client uploaded every part of a video to S3. What must happen before you mark that file version readable, and what do you clean up after a crash?",
     explanation:
-      "Complete the upload using its upload ID and the intended ordered parts. Verify the assembled object’s key, size, and supported checksum against the authorized upload. Commit the metadata pointer only once the immutable version is usable. Abort expired incomplete uploads and separately reclaim completed staged objects only when publication can no longer reference them.",
+      "Complete the upload using its upload ID and the intended ordered part numbers with their ETags, plus checksum fields when required. Verify the assembled object’s key, size, and supported checksum against the authorized upload. Commit the metadata pointer only once the immutable version is usable. Abort expired incomplete uploads and separately reclaim completed staged objects only when publication can no longer reference them.",
     rubric: [
       "Separate part upload from object completion.",
       "Verify the exact immutable version before updating metadata.",
@@ -128,7 +153,7 @@ export const advancedCards: RecallCard[] = [
     prompt:
       "Numbers arrive one at a time. Describe two heap invariants that let you return the median without sorting the full stream after every insert.",
     explanation:
-      "Maintain a max-heap for the lower half and a min-heap for the upper half. Every lower value is at most every upper value, and the lower heap has either the same size or one more item. Insert in the proper half and move one top across if necessary to restore sizes. Read the lower top for an odd count and average the two tops for an even count. Insertion is O(log n), lookup O(1), and storage O(n).",
+      "Maintain a max-heap for the lower half and a min-heap for the upper half. Every lower value is at most every upper value, and the lower heap has either the same size or one more item. Insert in the proper half and move one top across if necessary to restore sizes. For a nonempty stream, read the lower top for an odd count and average the two tops for an even count. An empty stream has no median. Insertion is O(log n), lookup O(1), and storage O(n).",
     rubric: [
       "State the value and size invariants.",
       "Describe rebalancing after insertion.",
@@ -138,7 +163,16 @@ export const advancedCards: RecallCard[] = [
       "An order-statistics tree can support deletions as well as inserts. A bounded small value domain may make counting simpler.",
     pitfall:
       "Keeping sizes equal is insufficient if the halves can interleave. Integer addition before averaging can overflow.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: binary heaps",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec8/",
+      },
+      {
+        label: "LeetCode problem: Find Median from Data Stream",
+        url: "https://leetcode.com/problems/find-median-from-data-stream/",
+      },
+    ],
   },
   {
     id: "recall-writer-fencing",
@@ -158,7 +192,12 @@ export const advancedCards: RecallCard[] = [
       "Perform the critical mutation within the same authoritative transaction that checks current ownership when both resources share a store.",
     pitfall:
       "A process-local timeout alone does not prevent a delayed network request or a paused process from applying a stale write.",
-    sources: [sources.locks, recovery],
+    sources: [
+      {
+        label: "Martin Kleppmann: fencing stale lock holders",
+        url: "https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html",
+      },
+    ],
   },
   {
     id: "recall-edit-distance",
@@ -178,7 +217,12 @@ export const advancedCards: RecallCard[] = [
       "Use memoized recursion over prefix lengths with the same state and boundary cases.",
     pitfall:
       "Forgetting empty prefixes or treating a match as a unit-cost substitution changes the optimum.",
-    sources: [mit],
+    sources: [
+      {
+        label: "MIT 6.006: edit distance and knapsack",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-fall-2011/resources/lecture-21-dp-iii-parenthesization-edit-distance-knapsack/",
+      },
+    ],
   },
   {
     id: "recall-coordinated-recovery",
@@ -224,7 +268,12 @@ export const advancedCards: RecallCard[] = [
       "Reserve one unused slot so head equals tail only when empty. Account for the lost slot when specifying capacity.",
     pitfall:
       "Comparing head and tail alone is ambiguous when all physical slots can be occupied.",
-    sources: [mit],
+    sources: [
+      {
+        label: "LeetCode problem: Design Circular Queue",
+        url: "https://leetcode.com/problems/design-circular-queue/",
+      },
+    ],
   },
   {
     id: "recall-ranking-snapshot",
@@ -252,7 +301,7 @@ export const advancedCards: RecallCard[] = [
     difficulty: "Intermediate",
     title: "Separate a tree path from its contribution",
     prompt:
-      "In a binary tree with signed values, a path may begin and end anywhere. What does a postorder function return when finding the maximum nonempty path sum?",
+      "In a nonempty binary tree with signed values, a path may begin and end anywhere. What does a postorder function return when finding the maximum nonempty path sum?",
     explanation:
       "Return the best downward path starting at the current node, so a parent can attach at most one branch. At each node, separately consider a complete path using the node and both positive child contributions. Maintain the best of those complete paths, initialized to negative infinity so all-negative inputs still select a node. Each node is visited once and the traversal stack is O(height).",
     rubric: [
@@ -264,6 +313,15 @@ export const advancedCards: RecallCard[] = [
       "Use an explicit postorder stack when recursion depth can exceed the language’s call stack.",
     pitfall:
       "Returning both branches to a parent would create a branching subgraph rather than a path.",
-    sources: [mit],
+    sources: [
+      {
+        label: "LeetCode problem: Binary Tree Maximum Path Sum",
+        url: "https://leetcode.com/problems/binary-tree-maximum-path-sum/",
+      },
+      {
+        label: "MIT 6.006: depth-first search",
+        url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec10/",
+      },
+    ],
   },
 ];

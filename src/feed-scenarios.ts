@@ -33,9 +33,13 @@ const replicaSource = {
   label: "Amazon RDS read replicas",
   url: "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ReadRepl.html",
 };
-const shardingSource = {
-  label: "DynamoDB write sharding",
-  url: "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html",
+const materializedViewSource = {
+  label: "Materialized views: read cost, update cost, and freshness",
+  url: "https://learn.microsoft.com/en-us/azure/architecture/patterns/materialized-view",
+};
+const cacheReplicaSource = {
+  label: "Valkey replication and read scaling",
+  url: "https://valkey.io/topics/replication/",
 };
 const following = evolve(
   application,
@@ -144,7 +148,7 @@ export const feedQuestions = {
         "Explain when pulling on read becomes expensive.",
       ],
       explanation:
-        "Use an EC2 API and RDS PostgreSQL. Index follow edges by reader and posts by author, creation time, and post ID. For a small follow set, select matching posts and order by descending (created_at, post_id). The second page takes rows strictly before the last tuple. Derive the reader from the authenticated request and bind the cursor to the selected feed. Measure actual scanned rows and p95 latency before materializing a timeline for every reader.",
+        "One starting design is an API and PostgreSQL. Index follows by reader and posts by (author_id, created_at, post_id). Query followed authors, order by created_at DESC, post_id DESC, and use (created_at, post_id) < (:last_time, :last_id) for the next page. The index narrows each author's rows; it does not automatically supply one globally ordered feed, so measure the merge or sort. Bind cursors to the authenticated reader. Immutable sort keys prevent offset shifts, but this is not a frozen snapshot when follows or eligibility change; refresh starts a new view.",
       alternatives:
         "Fetch a bounded recent slice per followed author and merge the sorted streams. The bound must allow a prolific author to fill a page.",
       pitfall:
@@ -155,7 +159,14 @@ export const feedQuestions = {
         label: "Read and publish",
         ids: ["customer", "restaurant", "api", "database"],
       },
-      sources: [sources.indexes, sources.pagination],
+      sources: [
+        sources.indexes,
+        sources.pagination,
+        {
+          label: "PostgreSQL row-constructor comparisons",
+          url: "https://www.postgresql.org/docs/current/functions-comparisons.html#ROW-WISE-COMPARISON",
+        },
+      ],
     },
     "feed-reader-burst": {
       parent: "feed-following-start",
@@ -173,7 +184,7 @@ export const feedQuestions = {
         "Explain what happens on misses and how to measure the benefit.",
       ],
       explanation:
-        "Keep a short-lived page-one list of post IDs in ElastiCache. Use reader, feed policy, and any follow-set version in the cache key. Hydrate the IDs in order and drop items that fail current access checks. Read the database on a miss with a concurrency limit. Age the cached list from the time it was computed. Measure hit rate, expired-page rebuilds, database reads, and first-page latency.",
+        "Keep a bounded page-one list of IDs in ElastiCache, keyed by reader, feed policy, and follow-set version. Hydrate in order with current access checks. Limit database miss concurrency. For the 20-second budget, measure age from the source snapshot or query start, not when a delayed fill reaches the cache; discard fills whose budget is exhausted. Invalidate or change the key on a follow change according to the chosen freshness rule. Measure hit rate, rebuild work, and read latency.",
       alternatives:
         "Materialize a bounded first page asynchronously for very active readers. That moves cost to writes and can lag under backlog.",
       pitfall:
@@ -277,7 +288,7 @@ export const feedQuestions = {
         label: "Publish and materialize",
         ids: ["api", "database", "queue", "worker"],
       },
-      sources: [sources.outbox, sources.queue, sources.constraints],
+      sources: [sources.outbox, sources.queue, sources.constraints, materializedViewSource],
     },
     "feed-celebrity": {
       parent: "feed-author-burst",
@@ -295,7 +306,7 @@ export const feedQuestions = {
         "Describe how crossing the threshold avoids gaps.",
       ],
       explanation:
-        "Fan out ordinary posts and read recent posts for high-fan-out authors at request time. Merge materialized and pulled candidates by the same (created_at, post_id) order before applying access rules. A transition can use a recorded cutover position and briefly read both paths, deduplicating by ID. Bound the per-reader heavy-author scan and measure p95 read cost alongside time to materialize ordinary posts.",
+        "One option is to fan out ordinary posts and pull recent posts for high-fan-out authors on read. A celebrity posting three times per minute to eight million followers would require 24 million timeline inserts per minute before retries. Compare that write cost with reads by active followers, rather than use a universal follower threshold. Merge both streams by (created_at, post_id), apply access rules, and deduplicate IDs. Record a cutover position and read both paths during transition so in-flight posts are not lost. Bound heavy-author scans and measure read latency and fan-out lag.",
       alternatives:
         "Partition fan-out by follower shard and reserve dedicated worker capacity if the product requires precomputed celebrity timelines.",
       pitfall:
@@ -309,7 +320,7 @@ export const feedQuestions = {
         label: "Hybrid delivery",
         ids: ["customer", "api", "database", "worker"],
       },
-      sources: [sources.indexes, shardingSource],
+      sources: [sources.indexes, materializedViewSource],
     },
     "feed-worker-replay": {
       parent: "feed-author-burst",
@@ -394,7 +405,7 @@ export const feedQuestions = {
         "Switch readers atomically and leave a rollback path.",
       ],
       explanation:
-        "Capture a consistent source snapshot or durable event watermark. Build timeline generation B separately, replay deltas after the watermark with stable IDs, and verify sample timelines plus coverage and lag. At cutover, serialize the reader pointer change with the last catch-up boundary or dual-apply the tail until the switch is committed. Keep the prior generation briefly for rollback and continue enforcing current access.",
+        "Build generation B from a consistent source snapshot and a matching durable watermark. Retain unaffected timeline history as well as the corrupted day's posts. Reproduce the defined follower-membership semantics; publish-time membership requires historical edges or recorded recipients, not today's follow table. Replay the write tail with stable IDs, verify coverage and lag, then coordinate the reader pointer switch with the final catch-up boundary. Keep the old generation for rollback and enforce current access on reads. If the necessary source history is missing, report that exact reconstruction is unavailable.",
       alternatives:
         "Fall back to pull-on-read for affected readers while a per-reader backfill completes, with a strict admission limit.",
       pitfall:
@@ -408,7 +419,7 @@ export const feedQuestions = {
         label: "Timeline recovery",
         ids: ["api", "database", "queue", "worker"],
       },
-      sources: [sources.isolation, sources.outbox],
+      sources: [sources.isolation, sources.outbox, materializedViewSource],
     },
   }),
   ...branchQuestions(actors(ranked), {
@@ -517,7 +528,7 @@ export const feedQuestions = {
         "Coalesce rebuilds and measure per-key saturation.",
       ],
       explanation:
-        "Cache immutable slices keyed by community, generation, and page range. Replicate the hottest first slice across read paths or use a bounded local cache, so adding shards does not leave all traffic on one key. Publish a generation pointer only after its data is durable. Limit concurrent misses and rebuilds, expire old versions after cursor TTL, and observe latency and traffic per key.",
+        "Cache immutable slices keyed by community, generation, and page range. Replicate the hot first slice across read paths or use bounded local caches; splitting later pages alone does not relieve a first-page hot spot. Publish a generation pointer after durable storage is ready. Cache replicas can lag, so a missing newly published generation needs a bounded fetch from its durable source. Coalesce misses, retain generations through their cursor lifetime, and measure per-key traffic and latency.",
       alternatives:
         "For a truly public immutable slice, use an explicitly cacheable CDN response. Keep personalized hydration and authorization on an appropriate private path.",
       pitfall:
@@ -531,7 +542,7 @@ export const feedQuestions = {
         label: "Hot snapshot reads",
         ids: ["customer", "api", "database", "cache"],
       },
-      sources: [shardingSource, sources.cache, sources.httpCache],
+      sources: [cacheReplicaSource, sources.cache, sources.httpCache],
     },
     "feed-private-groups": {
       parent: "feed-community-start",
@@ -580,7 +591,7 @@ export const feedQuestions = {
       explanation:
         "Serialize publish and ban against the same authoritative membership row in PostgreSQL. The publishing transaction locks and checks the current row, then writes the post and its audit or outbox record before committing. The ban changes that row under the same lock. Define separately whether already-committed posts are removed. Retried submissions use a stable operation ID so a lost response does not produce another post.",
       alternatives:
-        "Use serializable transactions with bounded retries and confirm the conflict actually covers the membership read and post write.",
+        "A per-member ordered command processor can establish the same boundary if both bans and publishes use it. Serializable isolation alone allows an overlapping publish to serialize before a ban even if the ban commits first; it is insufficient for this stronger commit-order rule without added coordination.",
       pitfall:
         "Checking membership in a separate request before inserting the post leaves a time-of-check race.",
       difficulty: "Intermediate",
@@ -610,9 +621,9 @@ export const feedQuestions = {
         "Define lag limits, fallback, and what the user sees.",
       ],
       explanation:
-        "Use a regional RDS read replica for public feed candidates while the primary remains authoritative for writes and policy. Classify which data can lag. For private posts, query current authorization on the authoritative path and avoid serving stale body versions when visibility can change. Gate replica use on measured lag and provide a bounded fallback or explicit degraded response.",
+        "Use the regional replica for feed candidates, with the primary authoritative for writes and current access policy. A stale row can still say public after a post became private: check current policy for every candidate whose visibility can change, not only rows the replica labels private. Serve body versions allowed by that policy. A separate permanently public projection can avoid those checks only if its access contract explicitly permits replication lag and delayed removal. Monitor lag and cap fallback traffic or return an unavailable response.",
       alternatives:
-        "Replicate a separate projection of posts whose public-access contract permits the lag and keep private reads at the primary.",
+        "Keep all mutable-visibility reads at the primary and replicate only content whose public-access contract tolerates the lag. This simpler boundary sacrifices regional read latency for those posts.",
       pitfall:
         "A read replica improves proximity but does not make reads immediately reflect a membership or visibility update.",
       difficulty: "Intermediate",
@@ -639,7 +650,7 @@ export const feedQuestions = {
         "Separate read-your-write for the author from global freshness.",
       ],
       explanation:
-        "Return an operation marker tied to the committed post. On a subsequent read, serve from the replica only when the service can verify it has applied the required position. Otherwise wait briefly or route that request to the primary with a capacity limit. A client can also render a clearly pending local item while it waits for confirmation. Keep the ordinary public read path on replicas.",
+        "Return a marker that proves the post's commit is included. For PostgreSQL, pg_current_wal_insert_lsn() sampled on the same primary after commit gives a conservative replay target at or beyond that commit. Use a replica only after its replay position reaches that marker, then start the read with a fresh snapshot. Bind markers to the database timeline or failover epoch. Otherwise wait briefly or route to the primary with a capacity limit. This makes the write visible to an eligible query; ranking or filters can still exclude it from the feed. Other readers may accept lag.",
       alternatives:
         "Use a short sticky-primary period after publishing, with an explicit fallback if actual lag can exceed the period.",
       pitfall:

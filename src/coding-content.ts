@@ -51,7 +51,7 @@ export const codingTracks = [
         128,
         "Longest Consecutive Sequence",
         "longest-consecutive-sequence",
-        "Start scanning only at the beginning of each run. Explain why the inner loops take expected linear time in total.",
+        "Iterate distinct values and start scanning only at the beginning of each run. Explain why duplicate run starts must not be scanned repeatedly and why the total is expected linear time.",
       ),
       problem(
         36,
@@ -109,7 +109,7 @@ export const codingTracks = [
         33,
         "Search in Rotated Sorted Array",
         "search-in-rotated-sorted-array",
-        "At each step identify the sorted half and justify when the target can be excluded from it. Test rotations at either end.",
+        "Use the problem's distinct-values assumption to identify a sorted half, then justify when the target can be excluded from it. Test rotations at either end.",
       ),
       problem(
         875,
@@ -244,7 +244,7 @@ export const codingTracks = [
         236,
         "Lowest Common Ancestor of a Binary Tree",
         "lowest-common-ancestor-of-a-binary-tree",
-        "Give the meaning of the recursive return value. Trace the case where one requested node is an ancestor of the other.",
+        "Give the meaning of the recursive return value under the problem's guarantee that both targets exist. Trace one target being an ancestor of the other; explain what extra check a missing-target variant needs.",
       ),
       problem(
         124,

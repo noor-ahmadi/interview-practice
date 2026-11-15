@@ -176,7 +176,7 @@ export const shortenerQuestions: Record<string, Question> = {
     title: "Two creations choose the same alias.",
     difficulty: "Foundation",
     prompt:
-      "Continue from the shortener design. Two API processes generate the same candidate alias at nearly the same time. How do you keep one link from overwriting the other, and how do you reason about collision risk?",
+      "Continue from the shortener design. Two API processes generate the same candidate alias. How do you prevent an overwrite? For one million uniformly random 8-character base62 candidates, estimate the chance that at least one pair collides.",
     givens: [
       "The database has a unique alias constraint",
       "Candidate generation can collide even when randomness is good",
@@ -185,15 +185,26 @@ export const shortenerQuestions: Record<string, Question> = {
     rubric: [
       "Let atomic uniqueness decide the winner.",
       "Generate another candidate after a collision without overwriting an existing target.",
-      "Relate namespace size and created-link count rather than promising zero collisions.",
+      "Use N = 62^8 and n(n-1)/(2N) for the small-probability estimate, about 0.23%; distinguish this from the next insert's collision chance.",
     ],
     explanation:
-      "Attempt the insert under the unique constraint. On a duplicate-key outcome, generate a fresh random candidate and retry with a bound; other failures need their own handling. A prior SELECT does not reserve the name. With a roughly uniform namespace of size N and n generated links, collision risk grows on the birthday scale, approximately n(n-1)/(2N) while the probability is small. Choose length and entropy for projected volume and abuse requirements, monitor retries, and never turn a collision into an update of another owner's link.",
+      "Insert under the unique constraint, retrying a duplicate candidate with a bound; a prior SELECT does not reserve the name. For independent uniform candidates, N = 62^8 is about 2.18 × 10^14. Among one million candidates, n(n-1)/(2N) is about 0.00229, or 0.23%, for at least one collision. The next candidate's chance of hitting an occupied alias is only about n/N. Neither is the chance of corrupting a link when atomic uniqueness rejects duplicates. Use ON CONFLICT DO NOTHING or roll back an aborted transaction before retrying; never update another owner's target on collision.",
     alternatives:
       "A unique numeric sequence encoded in base62 avoids random collisions but is predictable. A distributed ID generator adds coordination and failure concerns that this workload does not yet require.",
     pitfall:
       "Checking that an alias is unused and then writing without a constraint, or claiming a random identifier can never collide.",
-    sources: [s.constraints, s.random],
+    sources: [
+      s.constraints,
+      s.random,
+      {
+        label: "Cornell probability lecture: birthday collisions",
+        url: "https://www.cs.cornell.edu/~ginsparg/3950/fa19/lec11.pdf",
+      },
+      {
+        label: "PostgreSQL INSERT conflict handling",
+        url: "https://www.postgresql.org/docs/current/sql-insert.html#SQL-ON-CONFLICT",
+      },
+    ],
     questionFrame: links,
     answerFrame: collisions,
     children: ["short-custom-alias", "short-enumeration"],
@@ -348,7 +359,7 @@ export const shortenerQuestions: Record<string, Question> = {
       "Explain the latency, availability, and in-flight-response tradeoffs.",
     ],
     explanation:
-      "Check expires_at against current database time in an authoritative lookup or guarded database operation immediately at the defined decision point. PostgreSQL transaction-start timestamps can be stale after waits; select the time function and transaction boundaries deliberately. A cached target may be a hint, but it cannot independently prove current validity under this contract. This increases database work and couples availability to that check. Clock synchronization remains good operations, while an absolute guarantee about when a remote browser receives a response is a different and stronger promise.",
+      "Read the authoritative mapping and check expires_at > clock_timestamp() at the defined database decision point. PostgreSQL now() and CURRENT_TIMESTAMP are fixed at transaction start; statement_timestamp() is fixed at statement start, so both can precede a long wait. clock_timestamp() samples wall time when evaluated. Avoid reusing a pre-check from before a wait. This adds database work and availability dependence. It defines validity at the check, not when a remote browser receives the response, and still assumes the database clock follows the chosen time policy.",
     alternatives:
       "Relax the contract to an explicit clock-skew allowance or a bounded validity lease if performance and availability matter more than that exact decision boundary.",
     pitfall:
@@ -508,7 +519,7 @@ export const shortenerQuestions: Record<string, Question> = {
       "Delete the queue message only after the durable processing outcome is known.",
     ],
     explanation:
-      "In one PostgreSQL transaction, insert the event ID into a unique processed-event ledger and increment the appropriate aggregate only if that insert succeeds. Commit both together, then delete the SQS message. Redelivery sees the existing event ID and makes no second increment. A different genuine request gets a different event ID and still counts. Retain deduplication records for the supported replay horizon. This provides one database aggregate effect per accepted event within that contract, not proof of one event per human or one transport delivery.",
+      "In one PostgreSQL transaction, INSERT the event ID into a unique processed-event ledger with ON CONFLICT DO NOTHING RETURNING, and increment the aggregate only when a row is returned. Commit both together, then delete the SQS message. Redelivery makes no second increment; a different observed request has a different ID and still counts. Retain the ledger for the supported replay horizon. The producer must reuse the same ID for retries of one queue publication. This gives one aggregate effect per event within that horizon, not one event per human or one transport delivery.",
     alternatives:
       "Store immutable raw events under unique IDs and derive aggregates from them. An idempotent upsert of raw events can simplify rebuilding reports.",
     pitfall:
@@ -592,19 +603,19 @@ export const shortenerQuestions: Record<string, Question> = {
     title: "Analytics falls further behind each minute.",
     difficulty: "Intermediate",
     prompt:
-      "Continue from queued click events. Incoming events reach 10,000 per second while workers sustain only 1,000. How would you recover useful reports without overwhelming the analytics database or hiding lost data?",
+      "Continue from queued click events. Incoming events reach 10,000 per second while workers sustain 1,000. How would you recover without overwhelming the database? If safe processing later reaches 15,000 per second, how long does a 9-million-event backlog take to drain while arrivals remain at 10,000?",
     givens: [
       "Queue retention is finite",
       "A database has a measured safe write budget",
       "Redirect availability has priority over exact reports",
     ],
     rubric: [
-      "Recognize arrival rate exceeds processing capacity.",
+      "Calculate growth of 9,000 events/second, then net drain of 5,000/second: 9,000,000 / 5,000 = 1,800 seconds, or 30 minutes.",
       "Use bounded batching and measured scaling rather than queue depth alone.",
       "Monitor oldest-event age, retention risk, and explicit degradation policies.",
     ],
     explanation:
-      "A queue absorbs bursts but cannot make a permanent 9,000-event-per-second deficit disappear. Batch work, optimize rollup writes, and add consumers only within the database's safe budget. Track oldest-event age and drain capacity, not just queue length. Reserve redirect-path capacity and define sampling or dropping explicitly if exact capture is outside the accepted contract. Route poisoned work for inspection and account for it in reports. If retention will expire before recovery, communicate the data gap or archive events through a separate bounded recovery path.",
+      "The queue grows by 10,000 - 1,000 = 9,000 events each second. After safe capacity reaches 15,000, the net drain is 5,000 per second, so nine million queued events take 30 minutes, assuming steady rates and no extra retry work. Batch rollup writes and add consumers only within the database budget. Track age and retention risk as well as depth. Protect redirect capacity, isolate poison events, and report any explicit sampling, drops, or expired data. A queue absorbs a burst; it cannot fix a sustained capacity deficit.",
     alternatives:
       "An analytics-oriented store or time-bucketed batch aggregation can support higher sustained volume. A separate ingest tier may isolate redirect latency.",
     pitfall:

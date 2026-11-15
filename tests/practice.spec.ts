@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { questions as legacyQuestions } from "../src/content.ts";
 
 test("questions and solutions appear only when revealed, including after reload", async ({
   page,
@@ -268,13 +269,14 @@ test("an existing completed session migrates into history on reload", async ({
   await expect(history.getByText("Hard", { exact: true })).toBeVisible();
   await expect(history).not.toContainText("The lunch rush arrives.");
   await expect(history.locator("[data-component]")).toHaveCount(0);
-  await expect(history).not.toContainText("One application on Amazon EC2");
+  const savedAnswer = legacyQuestions["delivery-small-start"]!.explanation;
+  await expect(history).not.toContainText(savedAnswer);
   await history
     .getByText("Review reference answer", { exact: true })
     .first()
     .click();
   await expect(
-    history.getByText(/One application on Amazon EC2/),
+    history.getByText(savedAnswer, { exact: true }),
   ).toBeVisible();
   const diagramTrigger = history.getByRole("button", {
     name: "View reference diagram",
@@ -298,7 +300,7 @@ test("an existing completed session migrates into history on reload", async ({
     .getByText("Review reference answer", { exact: true })
     .first()
     .click();
-  await expect(history).not.toContainText("One application on Amazon EC2");
+  await expect(history).not.toContainText(savedAnswer);
   await history
     .getByText("Review reference answer", { exact: true })
     .last()

@@ -4,19 +4,21 @@ import { Scenario } from "./Scenario.tsx";
 import { Review } from "./Review.tsx";
 import { Library } from "./Library.tsx";
 import { PrivateCards } from "./PrivateCards.tsx";
+import { MockInterview } from "./Mock.tsx";
 import { useStudy } from "./useStudy.ts";
 import { backup, rateScenario, readBackup } from "./study.ts";
 import type { Study } from "./study.ts";
 import { supabase } from "./cloud.ts";
 import { switchFamily } from "./session.ts";
 
-type View = "scenario" | "review" | "library" | "cards";
+type View = "scenario" | "review" | "library" | "cards" | "mock";
 
 function currentView(): View {
   const requested = new URLSearchParams(location.search).get("view");
   return requested === "review" ||
     requested === "cards" ||
-    requested === "library"
+    requested === "library" ||
+    requested === "mock"
     ? requested
     : "scenario";
 }
@@ -51,6 +53,7 @@ export function App() {
       review: "Daily review",
       library: "Prep library",
       cards: "Private cards",
+      mock: "Mock interview",
     };
     document.title = `${titles[view]} · Interview Practice`;
   }, [view]);
@@ -112,7 +115,9 @@ export function App() {
               ? "#review-question"
               : view === "library"
                 ? "#library-heading"
-                : "#private-heading"
+                : view === "mock"
+                  ? "#mock-heading"
+                  : "#private-heading"
         }
       >
         {view === "scenario" || view === "review"
@@ -133,7 +138,11 @@ export function App() {
               key={id}
               href={`?view=${id}`}
               aria-label={id === "review" ? "Daily review" : undefined}
-              aria-current={view === id ? "page" : undefined}
+              aria-current={
+                view === id || (id === "library" && view === "mock")
+                  ? "page"
+                  : undefined
+              }
               onClick={(event) => followMode(event, id)}
             >
               {label}
@@ -280,6 +289,7 @@ export function App() {
               study={study}
               setStudy={setStudy}
               onReview={(event) => followMode(event, "review")}
+              onMock={(event) => followMode(event, "mock")}
               onScenario={(family) => {
                 setStudy((value) => ({
                   ...value,
@@ -290,6 +300,13 @@ export function App() {
                 }));
                 navigate("scenario");
               }}
+            />
+          ) : view === "mock" ? (
+            <MockInterview
+              key={user?.id ?? "guest"}
+              study={study}
+              setStudy={setStudy}
+              saveStatus={saveFailed ? "Couldn’t save on this device" : status}
             />
           ) : (
             <PrivateCards

@@ -20,53 +20,7 @@ import type { Grade, Question } from "./content.ts";
 import { openRating, ratingOptions } from "./study.ts";
 import type { Study } from "./study.ts";
 import { Arrow, Check } from "./icons.tsx";
-
-function ScenarioTimer({
-  deadline,
-  onToggle,
-}: {
-  deadline?: number;
-  onToggle: (deadline?: number) => void;
-}) {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!deadline) return;
-    const time = Date.now();
-    setNow(time);
-    if (deadline <= time) return;
-    const interval = window.setInterval(() => {
-      const time = Date.now();
-      setNow(time);
-      if (time >= deadline) window.clearInterval(interval);
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, [deadline]);
-  const seconds = deadline
-    ? Math.max(0, Math.ceil((deadline - now) / 1000))
-    : 0;
-  return (
-    <div className="scenario-timer">
-      {deadline !== undefined && (
-        <span role="timer" aria-label="Scenario time remaining">
-          {seconds
-            ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
-            : "Time’s up"}
-        </span>
-      )}
-      <button
-        type="button"
-        className="text-button"
-        onClick={() => {
-          const time = Date.now();
-          setNow(time);
-          onToggle(deadline ? undefined : time + 20 * 60 * 1000);
-        }}
-      >
-        {deadline ? "End timer" : "20 min timer"}
-      </button>
-    </div>
-  );
-}
+import { Timer } from "./Timer.tsx";
 
 export function Scenario({
   study,
@@ -178,8 +132,10 @@ export function Scenario({
               {saveFailed ? "Couldn’t save on this device" : saveStatus}
             </span>
             {session.phase !== "complete" && (
-              <ScenarioTimer
+              <Timer
                 key={session.path[0]}
+                minutes={20}
+                label="Scenario time remaining"
                 deadline={session.deadline}
                 onToggle={(deadline) =>
                   setPractice((value) => ({

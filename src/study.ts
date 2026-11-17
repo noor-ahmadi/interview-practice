@@ -12,6 +12,8 @@ import { initialPractice, rate, readPractice } from "./session.ts";
 import type { SavedPractice, Session } from "./session.ts";
 import { rollback, schedule, validSchedule } from "./scheduler.ts";
 import type { ScheduledCard } from "./scheduler.ts";
+import { validMockState } from "./mock.ts";
+import type { MockState } from "./mock.ts";
 
 export const contentRevision = scenarioRevision;
 export type ReviewEvent = {
@@ -42,6 +44,7 @@ export type Study = {
   drill?: { ids: string[]; index: number; revealed: boolean };
   codingDone?: number[];
   newCardsPerDay?: number;
+  mock?: MockState;
   notes: Record<string, string>;
   timeZone: string;
 };
@@ -321,7 +324,8 @@ export function readStudy(raw: string): Study | null {
           !Number.isInteger(drill.index) ||
           drill.index < 0 ||
           drill.index >= drill.ids.length ||
-          typeof drill.revealed !== "boolean"))
+          typeof drill.revealed !== "boolean")) ||
+      (s.mock !== undefined && !validMockState(s.mock))
     )
       return null;
     // Validate every restored field before it can enter the rendered UI or scheduler.

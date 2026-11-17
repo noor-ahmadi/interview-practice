@@ -19,6 +19,18 @@ import {
 } from "./study.ts";
 import type { Study } from "./study.ts";
 
+function count(n: number, word: string) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+function queueSummary(due: number, unseen: number) {
+  const parts = [
+    due > 0 && count(due, "due review"),
+    unseen > 0 && count(unseen, "new card"),
+  ].filter(Boolean);
+  return `${parts.join(" and ")} today.${due && unseen ? " Due reviews come first." : ""}`;
+}
+
 export function Review({
   study,
   setStudy,
@@ -76,9 +88,6 @@ export function Review({
         <>
           <header className="session-heading">
             <div>
-              <p className="section-label">
-                Interview Practice / Spaced repetition
-              </p>
               <h1 tabIndex={-1}>Daily review</h1>
               <p className="scenario-subtitle">
                 A little retrieval, every day. Aim for about ten minutes.
@@ -277,7 +286,7 @@ export function Review({
               </h2>
               <p>
                 {queue.ids.length
-                  ? `${queue.due.length} due ${queue.due.length === 1 ? "question" : "questions"} and ${queue.unseen.length} new ${queue.unseen.length === 1 ? "card" : "cards"}. Due questions come first.`
+                  ? queueSummary(queue.due.length, queue.unseen.length)
                   : nextDue
                     ? `The next review is ${new Date(nextDue).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
                     : "You can start a scenario or add a private card."}

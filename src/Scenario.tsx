@@ -19,38 +19,7 @@ import type { SavedPractice } from "./session.ts";
 import type { Grade, Question } from "./content.ts";
 import { openRating, ratingOptions } from "./study.ts";
 import type { Study } from "./study.ts";
-
-function Arrow() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      aria-hidden="true"
-    >
-      <path d="M5 12h14m-6-6 6 6-6 6" />
-    </svg>
-  );
-}
-
-function Check() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      aria-hidden="true"
-    >
-      <path d="m5 12 4 4L19 6" />
-    </svg>
-  );
-}
+import { Arrow, Check } from "./icons.tsx";
 
 function ScenarioTimer({
   deadline,
@@ -170,14 +139,16 @@ export function Scenario({
       <main>
         <header className="session-heading">
           <div>
-            <p className="section-label">Interview Practice / System design</p>
             <div className="family-heading">
-              <h1 tabIndex={-1}>{family.name}</h1>
+              <h1 className="sr-only" tabIndex={-1}>
+                {family.name}
+              </h1>
               <label className="sr-only" htmlFor="scenario-family">
                 Scenario family
               </label>
               <select
                 id="scenario-family"
+                className="family-select"
                 value={family.id}
                 onChange={(event) => {
                   const next = event.target.value as Family;
@@ -388,6 +359,19 @@ export function Scenario({
 
             {revealed && (
               <section className="feedback" aria-labelledby="feedback-heading">
+                <div className="rubric-pane">
+                  <h2>Did your answer cover these?</h2>
+                  <ul className="rubric-list">
+                    {question.rubric.map((point) => (
+                      <li key={point}>
+                        <span aria-hidden="true">
+                          <Check />
+                        </span>
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
                 <div className="feedback-main">
                   <h2 id="feedback-heading">A way to think about it</h2>
                   <p>{question.explanation}</p>
@@ -411,18 +395,7 @@ export function Scenario({
                     ))}
                   </div>
                 </div>
-                <div className="rubric-pane">
-                  <h3>Did your answer cover these?</h3>
-                  <ul className="rubric-list">
-                    {question.rubric.map((point) => (
-                      <li key={point}>
-                        <span aria-hidden="true">
-                          <Check />
-                        </span>
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
+                <div className="rating-pane">
                   <RatingChoices
                     options={ratingOptions(study, question.id, selected)}
                     selected={session.ratings[question.id]}

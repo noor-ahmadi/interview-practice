@@ -1,6 +1,7 @@
 import type { RecallCard, PrivateCard } from "./cards.ts";
 import type { Question } from "./content.ts";
 import { Check } from "./icons.tsx";
+import { shortAnswers } from "./short-answers.ts";
 
 export function RecallFeedback({
   item,
@@ -25,6 +26,12 @@ export function RecallFeedback({
             ))}
           </ul>
         </>
+      )}
+      {shortAnswers[item.id] && (
+        <div className="short-answer">
+          <h3>Short answer</h3>
+          <p>{shortAnswers[item.id]}</p>
+        </div>
       )}
       <p>{item.explanation}</p>
       {"rubric" in item && (

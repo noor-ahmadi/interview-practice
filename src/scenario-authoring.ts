@@ -51,7 +51,7 @@ export const application: DiagramFrame = {
 };
 export const cache: Component = {
   id: "cache",
-  name: "AWS ElastiCache",
+  name: "ElastiCache",
   purpose: "Disposable read views",
   kind: "database",
   service: "elasticache",

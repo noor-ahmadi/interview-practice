@@ -748,7 +748,11 @@ const algorithmCards: Entry[] = [
       "Assuming a topological order exists for every directed graph or forgetting disconnected vertices.",
     sources: [
       {
-        label: "MIT 6.006: depth-first search",
+        label: "Kahn (1962): Topological sorting of large networks",
+        url: "https://doi.org/10.1145/368996.369025",
+      },
+      {
+        label: "MIT 6.006: DFS finishing order as a topological order",
         url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/mit6_006s20_lec10/",
       },
       {

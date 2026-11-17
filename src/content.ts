@@ -145,7 +145,7 @@ export const questions: Record<string, Question> = {
       "Use health checks, bounded database connection pools, and load measurements before increasing capacity further.",
     ],
     explanation:
-      "1,000 orders/minute is about 16.7 order writes/second, not the total request rate: menu reads, status polling and work per order also matter. The exercise supplies measured CPU saturation; that rate alone does not prove a server needs scaling. An ALB can route across stateless EC2 instances. Keep orders in RDS and share sessions or use appropriate signed tokens. Budget total database connections across replicas, allow failure headroom, then load-test at the target latency. More API capacity can move the bottleneck to the database. Vertical scaling is also reasonable if its ceiling and availability meet the requirement.",
+      "1,000 orders/minute is about 16.7 order writes/second, not the total request rate: menu reads, status polling and work per order also matter. The exercise supplies measured CPU saturation; that rate alone does not prove a server needs scaling. An Application Load Balancer (ALB) can route across stateless EC2 instances. Keep orders in RDS and share sessions or use appropriate signed tokens. Budget total database connections across replicas, allow failure headroom, then load-test at the target latency. More API capacity can move the bottleneck to the database. Vertical scaling is also reasonable if its ceiling and availability meet the requirement.",
     alternatives:
       "A container service or managed application platform can supply the same capabilities. If later measurements identify a slow database query, improve that query or access pattern rather than continuing to add application instances.",
     pitfall:
@@ -170,7 +170,7 @@ export const questions: Record<string, Question> = {
         ),
         {
           id: "balancer",
-          name: "AWS ALB",
+          name: "Load balancer",
           purpose: "Healthy-instance routing",
           kind: "network",
           x: 300,

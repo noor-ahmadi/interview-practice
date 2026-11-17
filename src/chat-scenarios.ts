@@ -65,7 +65,7 @@ const fanout = evolve(
   [
     {
       id: "balancer",
-      name: "AWS ALB",
+      name: "Load balancer",
       purpose: "Healthy socket routing",
       kind: "network",
       service: "alb",
@@ -493,7 +493,7 @@ export const chatQuestions: Record<string, Question> = {
       "Keep notification transport distinct from the durable message log.",
     ],
     explanation:
-      "At the supplied limit, three instances hold 30,000 connections with no failure capacity. Four leave three after one failure, still at the measured ceiling; allow additional headroom and test reconnect bursts and uneven connections. ALB routes WebSockets to replicas, each managing its authorized sockets. Use Valkey Pub/Sub for cross-instance hints about committed messages, and recheck membership on content fetches; stale subscriptions must not grant access. Pub/Sub is at-most-once and retains no replay for a disconnected subscriber. PostgreSQL remains the durable log. A competing-consumer queue does not broadcast every message to every connection server.",
+      "At the supplied limit, three instances hold 30,000 connections with no failure capacity. Four leave three after one failure, still at the measured ceiling; allow additional headroom and test reconnect bursts and uneven connections. An Application Load Balancer (ALB) routes WebSockets to replicas, each managing its authorized sockets. Use Valkey Pub/Sub for cross-instance hints about committed messages, and recheck membership on content fetches; stale subscriptions must not grant access. Pub/Sub is at-most-once and retains no replay for a disconnected subscriber. PostgreSQL remains the durable log. A competing-consumer queue does not broadcast every message to every connection server.",
     alternatives:
       "A durable broker with an appropriate subscription model or a managed connection gateway can replace Pub/Sub and EC2 connection management.",
     pitfall:

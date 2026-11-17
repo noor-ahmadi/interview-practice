@@ -105,7 +105,7 @@ function update(
 }
 const cache: Component = {
   id: "cache",
-  name: "AWS ElastiCache",
+  name: "ElastiCache",
   purpose: "Disposable menu cache",
   kind: "database",
   service: "elasticache",

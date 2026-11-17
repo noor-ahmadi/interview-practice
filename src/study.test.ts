@@ -226,11 +226,11 @@ test("the daily limit follows the saved timezone across local clock boundaries",
   );
 });
 
-test("the recall library has 72 complete original items with unique IDs and tracks", () => {
-  assert.equal(recallCards.length, 72);
-  assert.equal(new Set(recallCards.map((c) => c.id)).size, 72);
+test("the recall library has 92 complete original items with unique IDs and tracks", () => {
+  assert.equal(recallCards.length, 92);
+  assert.equal(new Set(recallCards.map((c) => c.id)).size, 92);
   for (const topic of ["Algorithms", "System design"])
-    assert.equal(recallCards.filter((c) => c.topic === topic).length, 36);
+    assert.equal(recallCards.filter((c) => c.topic === topic).length, 46);
   const grouped = recallTracks.flatMap((track) => {
     assert.ok(track.cards.every((card) => card.topic === track.topic));
     return track.cards.map((card) => card.id);

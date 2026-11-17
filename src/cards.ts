@@ -1,5 +1,6 @@
 import { additionalCards } from "./recall-library.ts";
 import { advancedCards } from "./advanced-cards.ts";
+import { fundamentalsCards } from "./fundamentals-cards.ts";
 
 export type RecallCard = {
   id: string;
@@ -280,6 +281,7 @@ export const recallCards: RecallCard[] = [
   },
   ...additionalCards,
   ...advancedCards,
+  ...fundamentalsCards,
 ];
 
 export type PrivateCard = {

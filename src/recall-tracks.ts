@@ -16,6 +16,7 @@ export const recallTracks = [
     "object-storage",
     "index-prefix",
     "replica-freshness",
+    "replication-failover",
     "write-skew",
     "cap-partition",
     "quorum-overlap",
@@ -41,6 +42,7 @@ export const recallTracks = [
   ]),
   track("System design", "Capacity and observability", [
     "hot-shard",
+    "shard-key",
     "consistent-hash",
     "token-bucket",
     "tail-latency",
@@ -60,12 +62,31 @@ export const recallTracks = [
     "keyset-page",
     "snapshot-watermark",
   ]),
+  track("System design", "Networking and traffic", [
+    "https-path",
+    "tcp-stream",
+    "lb-health",
+  ]),
+  track("System design", "Streams and releases", [
+    "partitioned-log",
+    "consumer-offset",
+    "event-time",
+    "schema-evolution",
+    "safe-rollout",
+  ]),
+  track("Algorithms", "Complexity and practice", [
+    "recurrence-cost",
+    "recursion-pitfalls",
+    "bit-tricks",
+    "test-cases",
+  ]),
   track("Algorithms", "Arrays and hashing", [
     "prefix-sum",
     "amortized-array",
     "hash-complexity",
     "counting-sort",
     "ring-buffer",
+    "lru-cache",
   ]),
   track("Algorithms", "Windows and lists", [
     "sliding-window",
@@ -76,6 +97,10 @@ export const recallTracks = [
   ]),
   track("Algorithms", "Search, sorting, and heaps", [
     "binary-search",
+    "merge-sort",
+    "quicksort",
+    "sort-choice",
+    "heap-structure",
     "merge-intervals",
     "heap-top-k",
     "quickselect",
@@ -84,6 +109,7 @@ export const recallTracks = [
     "stream-median",
   ]),
   track("Algorithms", "Graphs and connectivity", [
+    "graph-representation",
     "bfs-shortest",
     "dijkstra",
     "topological-sort",

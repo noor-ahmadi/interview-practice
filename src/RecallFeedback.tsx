@@ -1,5 +1,6 @@
 import type { RecallCard, PrivateCard } from "./cards.ts";
 import type { Question } from "./content.ts";
+import { Check } from "./icons.tsx";
 
 export function RecallFeedback({
   item,
@@ -13,9 +14,14 @@ export function RecallFeedback({
           <p className="small-note">
             Compare your unaided answer. Equivalent correct approaches count.
           </p>
-          <ul className="recall-rubric">
+          <ul className="rubric-list recall-rubric">
             {item.rubric.map((point) => (
-              <li key={point}>{point}</li>
+              <li key={point}>
+                <span aria-hidden="true">
+                  <Check />
+                </span>
+                {point}
+              </li>
             ))}
           </ul>
         </>

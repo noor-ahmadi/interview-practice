@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import type { Dispatch, MouseEvent, SetStateAction } from "react";
 import { recallCards } from "./cards.ts";
 import type { RecallCard } from "./cards.ts";
@@ -17,6 +17,10 @@ const panels = [
 ] as const;
 type Panel = (typeof panels)[number]["id"];
 type SetStudy = Dispatch<SetStateAction<Study>>;
+
+function count(n: number, word: string) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
 
 const designFocus: Record<Family, string> = {
   delivery: "Capacity, stock, and order retries",
@@ -502,6 +506,57 @@ export function Library({
               ? "Drill cards on demand. Daily reviews handle spaced scheduling."
               : "Solve on LeetCode or in your editor, then use the reasoning check and mark the problem practiced."}
           </p>
+          {panel === "coding" && (
+            <details className="mock-outline coding-outline">
+              <summary>Practice a 45-minute coding round</summary>
+              <p>
+                Pick an unpracticed problem, start a timer, and talk the whole
+                time as if someone is listening. Treat the times as a practice
+                plan, not an employer’s rubric.
+              </p>
+              <ol>
+                <li>
+                  <strong>Clarify, 5 minutes.</strong> Restate the problem. Ask
+                  about input size, value ranges, duplicates, empty input, and
+                  the exact output. Work one small example by hand.
+                </li>
+                <li>
+                  <strong>Plan, 8 minutes.</strong> Say the brute-force approach
+                  and its cost first. Then explain the better approach, the
+                  invariant it keeps, and its time and space complexity before
+                  writing code.
+                </li>
+                <li>
+                  <strong>Code, 20 minutes.</strong> Write small, named pieces
+                  and say what each one does. If time runs short, stub a helper
+                  and say what it would return.
+                </li>
+                <li>
+                  <strong>Test, 8 minutes.</strong> Trace one normal input
+                  through your actual code. Then check boundaries, invalid
+                  input, a very large input, and ties. Fix bugs out loud.
+                </li>
+                <li>
+                  <strong>Wrap up, 4 minutes.</strong> Restate the complexity
+                  and name one trade-off or improvement you would make next.
+                </li>
+              </ol>
+              <p>
+                Afterward, open the reasoning check and note anything you missed
+                before marking the problem practiced.
+              </p>
+              <div className="sources">
+                <a
+                  href="https://careers.microsoft.com/v2/global/en/hiring-tips/technical-interviewing.html"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Microsoft: technical interview expectations{" "}
+                  <span aria-hidden="true">↗</span>
+                </a>
+              </div>
+            </details>
+          )}
           <div className="prep-filters">
             <label>
               {panel === "recall" ? "Search cards" : "Search problems"}
@@ -550,19 +605,27 @@ export function Library({
             {panel === "coding" &&
               ` · ${done.size} of ${codingProblemIds.size} practiced`}
           </p>
-          {recall.map((track, index) => (
-            <details
-              className="prep-track"
-              key={track.name}
-              open={index === 0 || !!topic || !!query.trim()}
-            >
-              <summary>
-                <span>
-                  {track.name}
-                  <small>{track.topic}</small>
-                </span>
-                <span>{track.cards.length}</span>
-              </summary>
+          {recall.map((track, index) => {
+            const rated = track.cards.filter(
+              (card) => study.schedules[card.id],
+            ).length;
+            return (
+              <Fragment key={track.name}>
+                {recall[index - 1]?.topic !== track.topic && (
+                  <h3 className="prep-group">{track.topic}</h3>
+                )}
+                <details
+                  className="prep-track"
+                  open={index === 0 || !!topic || !!query.trim()}
+                >
+                  <summary>
+                    <span>{track.name}</span>
+                    <span>
+                      {rated
+                        ? `${rated} of ${track.cards.length} rated`
+                        : count(track.cards.length, "card")}
+                    </span>
+                  </summary>
               <div className="prep-track-actions">
                 <button
                   className="secondary-button"
@@ -590,8 +653,10 @@ export function Library({
                   </li>
                 ))}
               </ul>
-            </details>
-          ))}
+                </details>
+              </Fragment>
+            );
+          })}
           {coding.map((track, index) => (
             <details
               className="prep-track"
@@ -608,7 +673,8 @@ export function Library({
                     <div className="problem-heading">
                       <a href={problem.url} target="_blank" rel="noreferrer">
                         <span className="problem-id">{problem.id}</span>{" "}
-                        {problem.title} <span aria-hidden="true">↗</span>
+                        <span className="problem-title">{problem.title}</span>{" "}
+                        <span aria-hidden="true">↗</span>
                         <span className="sr-only">
                           {" "}
                           on LeetCode, opens in a new tab

@@ -73,7 +73,6 @@ export function PrivateCards({
       <main>
         <header className="session-heading">
           <div>
-            <p className="section-label">Interview Practice / Your library</p>
             <h1 id="private-heading" tabIndex={-1}>
               Private cards
             </h1>

@@ -132,6 +132,9 @@ main {
 .save-status {
   white-space: nowrap;
 }
+.header-actions .text-button {
+  font-size: 14px;
+}
 .text-button {
   border: 0;
   background: transparent;
@@ -171,18 +174,34 @@ h1 {
   gap: 20px;
   flex-wrap: wrap;
 }
-.family-heading select {
-  min-height: 44px;
+.session-heading .family-select {
+  display: inline-block;
   width: auto;
-  flex: 0 1 auto;
   max-width: 100%;
-  padding: 8px 32px 8px 12px;
-  border: 1px solid #444;
-  border-radius: 6px;
-  background: #111;
-  color: var(--muted);
-  font: inherit;
-  font-size: 14px;
+  min-height: 44px;
+  margin-left: -10px;
+  padding: 2px 44px 2px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  appearance: none;
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b4b4b4' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 12px center / 20px;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.8px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.session-heading .family-select:hover {
+  border-color: #333;
+  background-color: var(--surface);
+}
+.family-select option {
+  background: var(--surface);
+  font-size: 16px;
+  letter-spacing: 0;
 }
 .question-count {
   white-space: nowrap;
@@ -468,6 +487,17 @@ textarea::placeholder {
   gap: 42px;
   outline: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "main rubric"
+    "main rating";
+  grid-template-rows: auto 1fr;
+  row-gap: 0;
+}
+.feedback-main {
+  grid-area: main;
+}
+.rating-pane {
+  grid-area: rating;
 }
 .feedback-main > p,
 .pitfall p,
@@ -518,7 +548,13 @@ textarea::placeholder {
   margin-bottom: 6px;
 }
 .rubric-pane {
+  grid-area: rubric;
   padding-top: 3px;
+}
+.feedback .rubric-pane h2 {
+  font-size: 15px;
+  line-height: 1.4;
+  letter-spacing: 0;
 }
 .rubric-list {
   padding: 0;
@@ -952,16 +988,28 @@ dialog::backdrop {
   }
   .feedback {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "rubric"
+      "main"
+      "rating";
+    grid-template-rows: auto;
     margin-top: 28px;
     padding: 22px 20px;
     border-radius: 16px;
-    gap: 32px;
+    gap: 28px;
+  }
+  .rubric-list {
+    margin-bottom: 0;
+  }
+  .rating-pane {
+    padding-top: 24px;
+    border-top: 1px solid #303030;
+  }
+  .session-heading .family-select {
+    font-size: 24px;
   }
   .feedback h2 {
     font-size: 23px;
-  }
-  .rubric-list {
-    margin-bottom: 28px;
   }
   .journey {
     flex-direction: column;
@@ -1410,6 +1458,31 @@ dialog::backdrop {
 .mock-outline li + li {
   margin-top: 6px;
 }
+.mock-outline > p {
+  margin-block: 2px 12px;
+}
+.mock-outline strong {
+  color: #fff;
+  font-weight: 500;
+}
+.coding-outline {
+  margin: 20px 0 4px;
+  border-bottom: 1px solid #303030;
+}
+.coding-outline[open] {
+  padding-bottom: 14px;
+}
+.prep-group {
+  margin: 28px 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.prep-group + .prep-track {
+  border-top: 0;
+}
 .prep-families strong {
   font-weight: 500;
 }
@@ -1531,7 +1604,15 @@ dialog::backdrop {
   min-height: 44px;
   padding-block: 12px;
   font-weight: 500;
+  text-decoration: none;
+}
+.problem-title {
+  text-decoration: underline;
   text-decoration-color: #707070;
+  text-underline-offset: 3px;
+}
+.problem-heading > a:hover .problem-title {
+  text-decoration-color: currentColor;
 }
 .problem-id {
   margin-right: 4px;
@@ -1671,10 +1752,7 @@ dialog::backdrop {
   padding-bottom: 12px;
 }
 .recall-rubric {
-  padding-left: 20px;
-}
-.recall-rubric li + li {
-  margin-top: 8px;
+  margin: 18px 0 22px;
 }
 .recall-layout.has-diagram .recall-answer {
   grid-column: 1 / -1;
@@ -1728,6 +1806,7 @@ select {
   margin-top: 24px;
 }
 .private-library {
+  align-self: start;
   min-width: 0;
   padding: 24px;
   background: var(--surface);

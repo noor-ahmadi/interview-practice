@@ -46,6 +46,16 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const titles: Record<View, string> = {
+      scenario: "Scenarios",
+      review: "Daily review",
+      library: "Prep library",
+      cards: "Private cards",
+    };
+    document.title = `${titles[view]} · Interview Practice`;
+  }, [view]);
+
+  useEffect(() => {
     setRestore(null);
     setUndo(null);
     setRestoreError("");

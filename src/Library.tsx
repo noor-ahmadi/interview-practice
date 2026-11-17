@@ -158,11 +158,13 @@ export function Library({
   study,
   setStudy,
   onReview,
+  onMock,
   onScenario,
 }: {
   study: Study;
   setStudy: SetStudy;
   onReview: (event: MouseEvent<HTMLAnchorElement>) => void;
+  onMock: (event: MouseEvent<HTMLAnchorElement>) => void;
   onScenario: (family: Family) => void;
 }) {
   const [panel, setPanel] = useState<Panel>("plan");
@@ -409,6 +411,18 @@ export function Library({
                 </li>
               ))}
             </ul>
+            <div className="mock-entry">
+              <span>
+                <strong>Timed mock: food delivery</strong>
+                <small>
+                  Blank brief, one late change, and a debrief by criterion
+                </small>
+              </span>
+              <a className="secondary-button" href="?view=mock" onClick={onMock}>
+                {study.mock?.current ? "Resume mock" : "Start mock"}
+                <span aria-hidden="true">→</span>
+              </a>
+            </div>
             <details className="mock-outline">
               <summary>20-minute guided practice</summary>
               <p>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { recallCards } from "./cards.ts";
 import { recallTracks } from "./recall-tracks.ts";
+import { shortAnswers } from "./short-answers.ts";
 import { codingProblemIds, codingTracks } from "./coding-content.ts";
 import { questions, rootQuestionId } from "./content.ts";
 import { reveal } from "./session.ts";
@@ -242,6 +243,15 @@ test("the recall library has 92 complete original items with unique IDs and trac
     );
     assert.ok(c.rubric.length >= 3 && c.sources.length > 0);
     assert.ok(c.sources.every((s) => new URL(s.url).protocol === "https:"));
+  }
+});
+
+test("every recall card has one short spoken answer and no extras exist", () => {
+  const ids = recallCards.map((c) => c.id).sort();
+  assert.deepEqual(Object.keys(shortAnswers).sort(), ids);
+  for (const [id, answer] of Object.entries(shortAnswers)) {
+    assert.ok(answer.trim().length > 40, id);
+    assert.ok(answer.length <= 200, `${id} is ${answer.length} characters`);
   }
 });
 

@@ -5,6 +5,8 @@ import { Review } from "./Review.tsx";
 import { Library } from "./Library.tsx";
 import { PrivateCards } from "./PrivateCards.tsx";
 import { MockInterview } from "./Mock.tsx";
+import { ClaudeSettings } from "./AskClaude.tsx";
+import { checkKey, friendlyError, readKey, writeKey } from "./claude.ts";
 import { useStudy } from "./useStudy.ts";
 import { backup, rateScenario, readBackup } from "./study.ts";
 import type { Study } from "./study.ts";
@@ -38,6 +40,23 @@ export function App() {
   const [undo, setUndo] = useState<Study | null>(null);
   const accountDialog = useRef<HTMLDialogElement>(null);
   const dataDialog = useRef<HTMLDialogElement>(null);
+  const claudeDialog = useRef<HTMLDialogElement>(null);
+  const [apiKey, setApiKey] = useState(readKey);
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keyStatus, setKeyStatus] = useState("");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const claudeReturn = useRef<HTMLElement | null>(null);
+
+  function openClaudeSettings() {
+    claudeReturn.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    optionsPanel.current?.hidePopover();
+    setKeyDraft("");
+    setKeyStatus("");
+    claudeDialog.current?.showModal();
+  }
   const optionsTrigger = useRef<HTMLButtonElement>(null);
   const optionsPanel = useRef<HTMLDivElement>(null);
 
@@ -202,8 +221,14 @@ export function App() {
           >
             Backup
           </button>
+          <button type="button" onClick={openClaudeSettings}>
+            Ask Claude
+          </button>
         </div>
       </div>
+      <ClaudeSettings.Provider
+        value={{ apiKey, openSettings: openClaudeSettings }}
+      >
       {!ready ? (
         <main>
           <p className="loading-message" role="status">
@@ -318,6 +343,141 @@ export function App() {
           )}
         </>
       )}
+      </ClaudeSettings.Provider>
+      <dialog
+        ref={claudeDialog}
+        aria-labelledby="claude-heading"
+        onClose={() => {
+          setKeyDraft("");
+          (claudeReturn.current ?? optionsTrigger.current)?.focus({
+            preventScroll: true,
+          });
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) claudeDialog.current?.close();
+        }}
+      >
+        <div className="dialog-content">
+          <div className="dialog-heading">
+            <h2 id="claude-heading">Ask Claude</h2>
+            <button
+              className="text-button"
+              onClick={() => claudeDialog.current?.close()}
+            >
+              Close
+            </button>
+          </div>
+          <p>
+            After you reveal an answer, Ask Claude can explain why it works or
+            check what you wrote. It uses Claude Haiku 5.5, Anthropic’s
+            lowest-cost current model, with an Anthropic API key you provide.
+          </p>
+          <ul className="claude-facts">
+            <li>
+              The key is saved only in this browser. It is not synced to your
+              account or included in backups.
+            </li>
+            <li>
+              Each request goes from this browser straight to Anthropic with the
+              question, its reference answer, and what you wrote for it.
+            </li>
+            <li>
+              Usage is billed to the key’s Anthropic organization, not to a
+              Claude.ai subscription. Max, Ultra, and Team plans include monthly
+              API credits you can claim under Settings → Billing on Claude.ai.
+            </li>
+          </ul>
+          <p className="account-status" role="status">
+            {apiKey
+              ? `A key ending in ${apiKey.slice(-4)} is saved in this browser.`
+              : "No key saved."}
+          </p>
+          <form
+            className="claude-key-form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const key = keyDraft.trim();
+              if (!key) return;
+              setKeyBusy(true);
+              setKeyStatus("Checking the key with Anthropic…");
+              try {
+                await checkKey(key);
+                if (!writeKey(key)) {
+                  setKeyStatus(
+                    "The key works, but this browser blocks storage, so it can’t be saved.",
+                  );
+                  return;
+                }
+                setApiKey(key);
+                setKeyDraft("");
+                setKeyStatus("Key saved. Ask Claude is ready.");
+              } catch (error) {
+                setKeyStatus(friendlyError(error));
+              } finally {
+                setKeyBusy(false);
+              }
+            }}
+          >
+            <label htmlFor="claude-key">Anthropic API key</label>
+            <input
+              id="claude-key"
+              name="claude-key"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="sk-ant-…"
+              value={keyDraft}
+              onChange={(event) => setKeyDraft(event.target.value)}
+            />
+            <div className="form-actions">
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={keyBusy || !keyDraft.trim()}
+              >
+                {apiKey ? "Replace key" : "Save key"}
+              </button>
+              {apiKey && (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    writeKey("");
+                    setApiKey("");
+                    setKeyStatus("Key removed from this browser.");
+                  }}
+                >
+                  Remove key
+                </button>
+              )}
+            </div>
+          </form>
+          {keyStatus && (
+            <p className="form-message" role="status">
+              {keyStatus}
+            </p>
+          )}
+          <p className="small-note">
+            <a
+              href="https://platform.claude.com/settings/keys"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Create a key <span aria-hidden="true">↗</span>
+            </a>{" "}
+            ·{" "}
+            <a
+              href="https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers"
+              target="_blank"
+              rel="noreferrer"
+            >
+              API credits for subscribers <span aria-hidden="true">↗</span>
+            </a>
+            . Use a dedicated key with a spend limit. Anyone who can use this
+            browser profile can read a saved key.
+          </p>
+        </div>
+      </dialog>
       <dialog
         ref={accountDialog}
         aria-labelledby="account-heading"

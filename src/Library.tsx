@@ -5,6 +5,8 @@ import type { RecallCard } from "./cards.ts";
 import { codingProblemIds, codingTracks } from "./coding-content.ts";
 import { codingSolutions } from "./coding-solutions.ts";
 import { RecallFeedback } from "./RecallFeedback.tsx";
+import { AskClaude, learnerSection } from "./AskClaude.tsx";
+import { cardContext } from "./claude.ts";
 import { recallTracks } from "./recall-tracks.ts";
 import { scenarioFamilies, scenarioQuestions } from "./scenario-content.ts";
 import type { Family } from "./scenario-content.ts";
@@ -30,6 +32,51 @@ const designFocus: Record<Family, string> = {
   feed: "Fan-out, rankings, and visibility",
   files: "Versioning, offline edits, and recovery",
 };
+
+function CodingAsk({
+  id,
+  title,
+  checkpoint,
+  solution,
+}: {
+  id: number;
+  title: string;
+  checkpoint: string;
+  solution: string;
+}) {
+  const [code, setCode] = useState("");
+  return (
+    <div className="coding-ask">
+      <label htmlFor={`code-${id}`}>
+        Your solution <span>Optional, kept only on this page</span>
+      </label>
+      <textarea
+        id={`code-${id}`}
+        rows={6}
+        maxLength={20000}
+        spellCheck={false}
+        value={code}
+        onChange={(event) => setCode(event.target.value)}
+      />
+      <AskClaude
+        what="this problem"
+        presets={[
+          "Check my solution for bugs and edge cases",
+          "Why does the reference solution work?",
+          "Compare the time and space of my solution",
+        ]}
+        context={() =>
+          [
+            `<problem>\nLeetCode ${id}: ${title}. The learner solved it on LeetCode or in an editor; the full statement is not included.\n</problem>`,
+            `<reasoning_check>\n${checkpoint}\n</reasoning_check>`,
+            `<reference_solution language="python">\n${solution}\n</reference_solution>`,
+            learnerSection("learner_solution", code),
+          ].join("\n\n")
+        }
+      />
+    </div>
+  );
+}
 
 function Drill({
   drill,
@@ -117,6 +164,20 @@ function Drill({
               Check your reasoning
             </h2>
             <RecallFeedback item={item} />
+            <AskClaude
+              key={item.id}
+              what="this card"
+              presets={[
+                "Why is the reference answer correct?",
+                "Check my notes against the rubric",
+                "Ask me a harder follow-up",
+              ]}
+              context={() =>
+                [cardContext(item), learnerSection("learner_notes", notes)].join(
+                  "\n\n",
+                )
+              }
+            />
             <div className="continue-action">
               <button
                 className="primary-button"
@@ -740,6 +801,12 @@ export function Library({
                         <pre tabIndex={0} aria-label={`Python solution for ${problem.title}`}>
                           <code>{codingSolutions[problem.id]}</code>
                         </pre>
+                        <CodingAsk
+                          id={problem.id}
+                          title={problem.title}
+                          checkpoint={problem.checkpoint}
+                          solution={codingSolutions[problem.id]!}
+                        />
                         <button
                           type="button"
                           className="text-button"

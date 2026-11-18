@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Arrow, Check } from "./icons.tsx";
 import { Timer } from "./Timer.tsx";
+import { AskClaude, learnerSection } from "./AskClaude.tsx";
 import {
   deliveryMock,
   mockMarks,
@@ -457,6 +458,39 @@ export function MockInterview({
               </section>
             );
           })}
+          <AskClaude
+            key={attempt.id}
+            what="this mock"
+            presets={[
+              "Review my design against the debrief",
+              "Which gap matters most, and how do I fix it?",
+              "How would you answer the lunch promotion follow-up?",
+            ]}
+            context={() =>
+              [
+                `<brief>\n${mock.brief.join("\n")}\n</brief>`,
+                `<interviewer_answers>\n${mock.clarifications
+                  .map((c) => `- ${c.question} ${c.answer}`)
+                  .join("\n")}\n</interviewer_answers>`,
+                `<requirement_change>\n${mock.change.text}\n${mock.change.question}\n</requirement_change>`,
+                ...mockSections.map((section) =>
+                  [
+                    `<criterion name="${mock.prompts[section].title}">`,
+                    `Reference covers:\n${mock.criteria[section].covers.join("\n")}`,
+                    `Reference: ${mock.criteria[section].reference}`,
+                    learnerSection("learner_notes", attempt.answers[section]),
+                    attempt.marks[section]
+                      ? `Learner self-mark: ${attempt.marks[section]}`
+                      : "",
+                    "</criterion>",
+                  ]
+                    .filter(Boolean)
+                    .join("\n"),
+                ),
+                learnerSection("learner_change_answer", attempt.answers.change),
+              ].join("\n\n")
+            }
+          />
           <section className="mock-card" aria-labelledby="mock-next">
             <h3 id="mock-next">What to practise next</h3>
             <p className="small-note">

@@ -4,6 +4,8 @@ import { Architecture } from "./Architecture.tsx";
 import { DiagramDialog, ExpandDiagramButton } from "./DiagramDialog.tsx";
 import { RatingChoices } from "./RatingChoices.tsx";
 import { RecallFeedback } from "./RecallFeedback.tsx";
+import { AskClaude, learnerSection } from "./AskClaude.tsx";
+import { cardContext } from "./claude.ts";
 import { scenarioQuestions as questions } from "./scenario-content.ts";
 import { recallCards } from "./cards.ts";
 import {
@@ -244,6 +246,21 @@ export function Review({
                 Check your reasoning
               </h2>
               <RecallFeedback item={item} />
+              <AskClaude
+                key={item.id}
+                what="this question"
+                presets={[
+                  "Why is the reference answer correct?",
+                  "Check my notes against the rubric",
+                  "Ask me a harder follow-up",
+                ]}
+                context={() =>
+                  [
+                    cardContext(item),
+                    learnerSection("learner_notes", study.notes[item.id]),
+                  ].join("\n\n")
+                }
+              />
               <RatingChoices
                 options={ratingOptions(study, item.id, selected)}
                 selected={selected?.grade}

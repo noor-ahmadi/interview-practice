@@ -2301,3 +2301,136 @@ input[type="file"]::file-selector-button {
 .problem-solution .small-note {
   margin-top: 0;
 }
+.ask-claude {
+  margin-top: 20px;
+}
+.ask-claude.open {
+  padding: 20px 22px;
+  border: 1px solid #333;
+  border-radius: 14px;
+  background: #151515;
+}
+.ask-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.ask-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.ask-head > span {
+  color: var(--faint);
+  font-size: 13px;
+}
+.ask-head .text-button {
+  margin-left: auto;
+}
+.ask-setup p {
+  margin: 8px 0 14px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.ask-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ask-presets button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid #3a3a3a;
+  border-radius: 999px;
+  background: transparent;
+  color: #e4e4e4;
+  font-size: 14px;
+  text-align: left;
+}
+.ask-presets button:hover:not(:disabled) {
+  border-color: #666;
+}
+.ask-presets button:disabled {
+  opacity: 0.5;
+}
+.ask-thread {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+.ask-turn {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+.ask-turn.user {
+  justify-self: end;
+  max-width: 85%;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--raised);
+  color: #fff;
+}
+.ask-turn.assistant {
+  color: #e4e4e4;
+}
+.ask-form {
+  margin-top: 16px;
+}
+.ask-form label,
+.coding-ask > label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.ask-form textarea {
+  min-height: 64px;
+}
+.ask-form .form-actions {
+  margin-top: 8px;
+}
+.ask-claude .small-note {
+  margin-top: 12px;
+}
+.coding-ask {
+  margin: 14px 0 8px;
+}
+.coding-ask > label span {
+  margin-left: 8px;
+  color: var(--faint);
+  font-size: 13px;
+  font-weight: 400;
+}
+.coding-ask textarea {
+  min-height: 120px;
+  font: 13px/1.6 ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  tab-size: 4;
+}
+.claude-facts {
+  margin: 14px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.claude-facts li + li {
+  margin-top: 6px;
+}
+.claude-key-form label {
+  display: block;
+  margin: 18px 0 8px;
+  font-weight: 500;
+}
+.claude-key-form .form-actions {
+  margin-top: 12px;
+}
+@media (max-width: 640px) {
+  .ask-claude.open {
+    padding: 18px 16px;
+  }
+  .ask-turn.user {
+    max-width: 100%;
+  }
+}

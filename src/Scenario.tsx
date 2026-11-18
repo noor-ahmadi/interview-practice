@@ -21,6 +21,8 @@ import { openRating, ratingOptions } from "./study.ts";
 import type { Study } from "./study.ts";
 import { Arrow, Check } from "./icons.tsx";
 import { Timer } from "./Timer.tsx";
+import { AskClaude, learnerSection } from "./AskClaude.tsx";
+import { cardContext } from "./claude.ts";
 
 export function Scenario({
   study,
@@ -378,6 +380,26 @@ export function Scenario({
                   )}
                 </div>
               </section>
+            )}
+            {revealed && (
+              <AskClaude
+                key={question.id}
+                what="this question"
+                presets={[
+                  "Why does the reference design fit these givens?",
+                  "Check my notes against the rubric",
+                  "What breaks first if the load grows 10 times?",
+                ]}
+                context={() =>
+                  [
+                    cardContext(question),
+                    learnerSection(
+                      "learner_notes",
+                      practice.session.notes[question.id],
+                    ),
+                  ].join("\n\n")
+                }
+              />
             )}
 
             <nav className="journey" aria-label="Revealed session path">

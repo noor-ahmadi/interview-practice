@@ -138,3 +138,20 @@ test("the library opens a new design family and preserves timers and review sett
     page.getByRole("heading", { name: "Private cards", exact: true }),
   ).toBeFocused();
 });
+
+test("a coding problem reveals its reference solution only on request", async ({ page }) => {
+  await page.goto("/?view=library");
+  await page.getByRole("button", { name: "Coding practice", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Search problems" }).fill("Two Sum");
+  const item = page.locator(".prep-problem").filter({ hasText: "Two Sum" });
+  const code = item.getByLabel("Python solution for Two Sum");
+  await expect(code).toBeHidden();
+  await item.getByText("Reference solution in Python").click();
+  await expect(code).toBeVisible();
+  await expect(code).toContainText("def twoSum(self, nums: List[int], target: int)");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
+});

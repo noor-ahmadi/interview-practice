@@ -3,6 +3,7 @@ import type { Dispatch, MouseEvent, SetStateAction } from "react";
 import { recallCards } from "./cards.ts";
 import type { RecallCard } from "./cards.ts";
 import { codingProblemIds, codingTracks } from "./coding-content.ts";
+import { codingSolutions } from "./coding-solutions.ts";
 import { RecallFeedback } from "./RecallFeedback.tsx";
 import { recallTracks } from "./recall-tracks.ts";
 import { scenarioFamilies, scenarioQuestions } from "./scenario-content.ts";
@@ -729,6 +730,35 @@ export function Library({
                       <summary>Reasoning check</summary>
                       <p>{problem.checkpoint}</p>
                     </details>
+                    {codingSolutions[problem.id] && (
+                      <details className="problem-checkpoint problem-solution">
+                        <summary>Reference solution in Python</summary>
+                        <p className="small-note">
+                          One clean approach, tested against known cases. Try
+                          the problem first; equivalent solutions count.
+                        </p>
+                        <pre tabIndex={0} aria-label={`Python solution for ${problem.title}`}>
+                          <code>{codingSolutions[problem.id]}</code>
+                        </pre>
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={(event) => {
+                            const button = event.currentTarget;
+                            navigator.clipboard
+                              ?.writeText(codingSolutions[problem.id]!)
+                              .then(() => {
+                                button.textContent = "Copied";
+                              })
+                              .catch(() => {
+                                button.textContent = "Copy failed";
+                              });
+                          }}
+                        >
+                          Copy code
+                        </button>
+                      </details>
+                    )}
                   </li>
                 ))}
               </ul>
